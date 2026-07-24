@@ -1,0 +1,11 @@
+# 只提交用户编写的 code 目录，其余 SDK、工程配置和生成文件均忽略
+*
+
+# 保留忽略规则本身
+!.gitignore
+
+# 保留 project/code 目录及其全部内容
+!project/
+project/*
+!project/code/
+!project/code/**
