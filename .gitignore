@@ -4,8 +4,10 @@
 # 保留忽略规则本身
 !.gitignore
 
-# 保留 project/code 目录及其全部内容
+# 保留 project/code 和 project/user 目录及其全部内容
 !project/
 project/*
 !project/code/
 !project/code/**
+!project/user/
+!project/user/**
