@@ -3,7 +3,8 @@
 
 #include "zf_common_headfile.h"
 
-#define TCPWM_PERIOD     (2000u)      //20kHz中心对齐PWM周期计数值
+#define TCPWM_PERIOD      (2000u)      // 20kHz中心对齐PWM周期计数值
+#define TCPWM_DUTY_MAX    (10000u)     // PWM占空比最大值，对应100%
 
 /*===========================================================================*/
 /*  单相桥臂硬件描述                                                          */
@@ -32,5 +33,34 @@ typedef struct
     TCPWM_PHASE_t b;
     TCPWM_PHASE_t c;
 } TCPWM_3PHASE_T;
+
+/***********************************************
+ * @brief : 初始化三相中心对齐互补PWM
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-14
+ * @author: LYF
+ ************************************************/
+void My_TCPWM_Init(void);
+
+/***********************************************
+ * @brief : 启动三相PWM
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-14
+ * @author: LYF
+ ************************************************/
+void My_TCPWM_Start(void);
+
+/***********************************************
+ * @brief : 设置三相PWM占空比
+ * @param : DutyA A相占空比，范围0~10000
+ * @param : DutyB B相占空比，范围0~10000
+ * @param : DutyC C相占空比，范围0~10000
+ * @return: void
+ * @date  : 2026-08-14
+ * @author: LYF
+ ************************************************/
+void My_TCPWM_SetDuty(uint16 DutyA, uint16 DutyB, uint16 DutyC);
 
 #endif // MY_TCPWM_H

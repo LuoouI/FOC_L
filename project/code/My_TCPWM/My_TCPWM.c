@@ -97,6 +97,75 @@ static void TCPWM_Phase_Init(const TCPWM_PHASE_t *phase)
     TCPWM_config.trigger1EventCfg   = CY_TCPWM_COUNTER_DISABLED;
     
     Cy_Tcpwm_Pwm_Init(phase->timer, &TCPWM_config);
-    Cy_Tcpwm_Pwm_Enable(phase->timer);
 
+    /* 当前SDK初始化函数未配置比较匹配方向，需要手动补齐 */
+    phase->timer->unCTRL.stcField.u1CC0_MATCH_UP_EN   = 1u;
+    phase->timer->unCTRL.stcField.u1CC0_MATCH_DOWN_EN = 1u;
+    phase->timer->unCTRL.stcField.u1CC1_MATCH_UP_EN   = 0u;
+    phase->timer->unCTRL.stcField.u1CC1_MATCH_DOWN_EN = 0u;
+
+    Cy_Tcpwm_Pwm_Enable(phase->timer);
+}
+
+/***********************************************
+ * @brief : 初始化单相桥臂全部TCPWM资源
+ * @param : phase 单相桥臂硬件描述
+ * @return: void
+ * @date  : 2026-08-14
+ * @author: LYF
+ ************************************************/
+static void TCPWM_SinglePhase_Init(const TCPWM_PHASE_t *phase)
+{
+    TCPWM_Clock_Init(phase);
+    TCPWM_GPIO_Init(phase);
+    TCPWM_Phase_Init(phase);
+}
+
+/***********************************************
+ * @brief : 将万分比占空比转换为TCPWM比较值
+ * @param : Duty 占空比，范围0~10000
+ * @return: TCPWM比较值
+ * @date  : 2026-08-14
+ * @author: LYF
+ ************************************************/
+static uint32 TCPWM_DutyToCompare(uint16 Duty)
+{
+    if (Duty > TCPWM_DUTY_MAX)
+    {
+        Duty = TCPWM_DUTY_MAX;
+    }
+
+    return TCPWM_PERIOD -
+           ((uint32)TCPWM_PERIOD * Duty / TCPWM_DUTY_MAX);
+}
+
+void My_TCPWM_Init(void)
+{
+    TCPWM_SinglePhase_Init(&TCPWM_3PHASE.a);
+    TCPWM_SinglePhase_Init(&TCPWM_3PHASE.b);
+    TCPWM_SinglePhase_Init(&TCPWM_3PHASE.c);
+}
+
+void My_TCPWM_Start(void)
+{
+    Cy_Tcpwm_TriggerStart(TCPWM_3PHASE.a.timer);
+    Cy_Tcpwm_TriggerStart(TCPWM_3PHASE.b.timer);
+    Cy_Tcpwm_TriggerStart(TCPWM_3PHASE.c.timer);
+}
+
+void My_TCPWM_SetDuty(uint16 DutyA, uint16 DutyB, uint16 DutyC)
+{
+    Cy_Tcpwm_Pwm_SetCompare0_Buff(
+        TCPWM_3PHASE.a.timer,
+        TCPWM_DutyToCompare(DutyA));
+    Cy_Tcpwm_Pwm_SetCompare0_Buff(
+        TCPWM_3PHASE.b.timer,
+        TCPWM_DutyToCompare(DutyB));
+    Cy_Tcpwm_Pwm_SetCompare0_Buff(
+        TCPWM_3PHASE.c.timer,
+        TCPWM_DutyToCompare(DutyC));
+
+    Cy_Tcpwm_TriggerCapture0(TCPWM_3PHASE.a.timer);
+    Cy_Tcpwm_TriggerCapture0(TCPWM_3PHASE.b.timer);
+    Cy_Tcpwm_TriggerCapture0(TCPWM_3PHASE.c.timer);
 }

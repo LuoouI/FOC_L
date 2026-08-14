@@ -62,6 +62,8 @@ void pit0_ch10_isr()                    // 定时器通道 10 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH10);
     
+    // 按键扫描
+    key_scanner();
 }
 
 void pit0_ch11_isr()                    // 定时器通道 11 周期中断服务函数      
