@@ -92,6 +92,8 @@ static void TCPWM_Phase_Init(const TCPWM_PHASE_t *phase)
     TCPWM_config.killMode           = CY_TCPWM_PWM_NOT_STOP_ON_KILL;
     TCPWM_config.countInputMode     = CY_TCPWM_INPUT_LEVEL;
     TCPWM_config.countInput         = 1uL;
+    TCPWM_config.startInputMode     = CY_TCPWM_INPUT_RISING_EDGE;
+    TCPWM_config.startInput         = CY_TCPWM_INPUT_TRIG3;
     TCPWM_config.pwmOnDisable       = CY_TCPWM_PWM_OUT_MODE_LOW;
     TCPWM_config.trigger0EventCfg   = CY_TCPWM_COUNTER_DISABLED;
     TCPWM_config.trigger1EventCfg   = CY_TCPWM_COUNTER_DISABLED;
@@ -148,9 +150,11 @@ void My_TCPWM_Init(void)
 
 void My_TCPWM_Start(void)
 {
-    Cy_Tcpwm_TriggerStart(TCPWM_3PHASE.a.timer);
-    Cy_Tcpwm_TriggerStart(TCPWM_3PHASE.b.timer);
-    Cy_Tcpwm_TriggerStart(TCPWM_3PHASE.c.timer);
+    /* 使用TCPWM公共触发输入，让三相计数器在同一个硬件触发沿启动 */
+    Cy_TrigMux_SwTrigger(
+        TRIG_OUT_MUX_4_TCPWM_ALL_CNT_TR_IN0,
+        TRIGGER_TYPE_EDGE,
+        1u);
 }
 
 void My_TCPWM_SetDuty(uint16 DutyA, uint16 DutyB, uint16 DutyC)

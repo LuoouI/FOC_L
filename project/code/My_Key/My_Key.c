@@ -8,8 +8,7 @@ void My_Key_Service(void)
     {
         key_clear_state(KEY_2);
         a += 1000;
+        My_TCPWM_SetDuty(a,a,a);
     }
-
-    My_TCPWM_SetDuty(a,a,a);
 
 }

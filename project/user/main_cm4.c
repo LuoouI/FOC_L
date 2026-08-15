@@ -67,8 +67,7 @@ int main(void)
     for(;;)
     {
         // 此处编写需要循环执行的代码
-       My_Key_Service();
-       Battery_voltage = My_ADC_GetBatteryVoltage();
+        My_Key_Service();
        
 
         // 此处编写需要循环执行的代码
