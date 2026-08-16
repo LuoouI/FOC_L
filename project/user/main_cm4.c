@@ -68,11 +68,11 @@ int main(void)
         // 此处编写需要循环执行的代码   
         My_Key_Service();
     
-        // printf("%u,%u,%u,%u\r\n",
-        //        (uint32)MyAdc.Adc1Raw,
-        //        (uint32)MyAdc.Adc1Filtered,
-        //        (uint32)MyAdc.Adc2Raw,
-        //        (uint32)MyAdc.Adc2Filtered);
+        printf("%u,%u,%u,%u\r\n",
+               (uint32)MyAdc.Adc1Raw,
+               (uint32)MyAdc.Adc1Filtered,
+               (uint32)MyAdc.Adc2Raw,
+               (uint32)MyAdc.Adc2Filtered);
         // 此处编写需要循环执行的代码
     }
 }

@@ -31,10 +31,10 @@ typedef struct
 /*===========================================================================*/
 typedef struct
 {
-    TCPWM_PHASE_t a;
-    TCPWM_PHASE_t b;
-    TCPWM_PHASE_t c;
-} TCPWM_3PHASE_T;
+    TCPWM_PHASE_t a;                              // A相桥臂
+    TCPWM_PHASE_t b;                              // B相桥臂
+    TCPWM_PHASE_t c;                              // C相桥臂
+} TCPWM_3PHASE_t;
 
 /***********************************************
  * @brief : 初始化三相中心对齐互补PWM
@@ -46,7 +46,7 @@ typedef struct
 void My_TCPWM_Init(void);
 
 /***********************************************
- * @brief : 启动三相PWM
+ * @brief : 通过公共硬件触发线同步启动三相PWM和ADC基准计数器
  * @param : /
  * @return: void
  * @date  : 2026-08-14
