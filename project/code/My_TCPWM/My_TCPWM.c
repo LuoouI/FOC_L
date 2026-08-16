@@ -112,9 +112,9 @@ static void TCPWM_ADC_Trigger_Init(void)
     /* COUNT_UP_DOWN1的TC仅在向下计数到零时产生，作为中心对齐周期基准 */
     AdcTriggerConfig.interruptSources   = CY_TCPWM_INT_ON_TC;
     AdcTriggerConfig.killMode           = CY_TCPWM_PWM_NOT_STOP_ON_KILL;
-    /* 主计数器使用公共触发线的TRIG0输入 */
+    /* 公共tr_all_cnt_in[0]对应TCPWM的TRIG3输入 */
     AdcTriggerConfig.startInputMode     = CY_TCPWM_INPUT_RISING_EDGE;
-    AdcTriggerConfig.startInput         = CY_TCPWM_INPUT_TRIG0;
+    AdcTriggerConfig.startInput         = CY_TCPWM_INPUT_TRIG3;
     AdcTriggerConfig.countInputMode     = CY_TCPWM_INPUT_LEVEL;
     AdcTriggerConfig.countInput         = CY_TCPWM_INPUT1;
     AdcTriggerConfig.pwmOnDisable       = CY_TCPWM_PWM_OUT_MODE_LOW;
@@ -132,7 +132,7 @@ static void TCPWM_ADC_Trigger_Init(void)
     TCPWM0_GRP1_CNT0->unCTRL.stcField.u1CC1_MATCH_UP_EN    = 1u;
     TCPWM0_GRP1_CNT0->unCTRL.stcField.u1CC1_MATCH_DOWN_EN  = 0u;
 
-    // TCPWM_Center_Interrupt_Init();
+    TCPWM_Center_Interrupt_Init();
     Cy_Tcpwm_Pwm_Enable(TCPWM0_GRP1_CNT0);
 }
 
@@ -282,25 +282,12 @@ void My_TCPWM_Init(void)
 
 void My_TCPWM_Start(void)
 {
-    uint32 TriggerRetry;
-
-    /* 公共触发线在芯片内部扇出到Group0的TRIG3和Group1的TRIG0 */
-    for (TriggerRetry = 0u; TriggerRetry < 32u; TriggerRetry++)
-    {
-        if (Cy_TrigMux_SwTrigger(
-                TRIG_OUT_MUX_4_TCPWM_ALL_CNT_TR_IN0,
-                TRIGGER_TYPE_EDGE,
-                1u) == CY_TRIGMUX_SUCCESS)
-        {
-            break;
-        }
-    }
-
-    /* 公共触发未启动ADC计数器时，保证CC1采样事件能够运行 */
-    if (TCPWM0_GRP1_CNT0->unSTATUS.stcField.u1RUNNING == 0u)
-    {
-        Cy_Tcpwm_TriggerStart(TCPWM0_GRP1_CNT0);
-    }
+    /* 公共触发线在芯片内部扇出到各计数器的TRIG3 */
+    /* 只发送一次启动沿，避免重复触发破坏各计数器的同步相位 */
+    (void)Cy_TrigMux_SwTrigger(
+        TRIG_OUT_MUX_4_TCPWM_ALL_CNT_TR_IN0,
+        TRIGGER_TYPE_EDGE,
+        1u);
 }
 
 void My_TCPWM_SetDuty(uint16 DutyA, uint16 DutyB, uint16 DutyC)
