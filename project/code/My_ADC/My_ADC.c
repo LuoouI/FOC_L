@@ -1,14 +1,12 @@
 #include "My_ADC.h"
+#include "Current_sample/Current_sample.h"
 #include "adc/cy_adc.h"
 #include "trigmux/cy_trigmux.h"
 
-AdcData_t MyAdc = {0};
-static Sliding_Filter_t ADC1_Filter;
-static Sliding_Filter_t ADC2_Filter;
-static float ADC1_FilterWindow[ADC_FILTER_WINDOW_SIZE];
-static float ADC2_FilterWindow[ADC_FILTER_WINDOW_SIZE];
 static volatile uint8 Adc1SampleDone = 0u;
 static volatile uint8 Adc2SampleDone = 0u;
+static uint16 AdcLastRawU;
+static uint16 AdcLastRawV;
 
 /*===========================================================================*/
 /*  两路电流ADC硬件描述                                                       */
@@ -222,7 +220,6 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
 
     if (IsFirstInterrupt)
     {
-        MyAdc.SampleReady = 0u;
         gpio_toggle_level(ADC_FIRST_ISR_DEBUG_PIN);
         if (BothGroupDoneAtEntry)
         {
@@ -232,12 +229,12 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
 
     if (ChannelIndex == 0u)
     {
-        MyAdc.Adc1Raw = My_ADC_ReadResult(&AdcChannels[0], MyAdc.Adc1Raw);
+        AdcLastRawU = My_ADC_ReadResult(&AdcChannels[0], AdcLastRawU);
         Adc1SampleDone = 1u;
     }
     else
     {
-        MyAdc.Adc2Raw = My_ADC_ReadResult(&AdcChannels[1], MyAdc.Adc2Raw);
+        AdcLastRawV = My_ADC_ReadResult(&AdcChannels[1], AdcLastRawV);
         Adc2SampleDone = 1u;
     }
 
@@ -247,13 +244,9 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
 
     if ((Adc1SampleDone != 0u) && (Adc2SampleDone != 0u))
     {
-        Sliding_Filter_Update(&ADC1_Filter, (float)MyAdc.Adc1Raw);
-        Sliding_Filter_Update(&ADC2_Filter, (float)MyAdc.Adc2Raw);
-        MyAdc.Adc1Filtered = Sliding_Filter_GetUint16(&ADC1_Filter);
-        MyAdc.Adc2Filtered = Sliding_Filter_GetUint16(&ADC2_Filter);
+        Current_Sample_Update(AdcLastRawU, AdcLastRawV);
         Adc1SampleDone = 0u;
         Adc2SampleDone = 0u;
-        MyAdc.SampleReady = 1u;
     }
 }
 
@@ -322,7 +315,6 @@ static void My_ADC_Trigger_Init(void)
         0u);
     if (AdcStatus != CY_ADC_SUCCESS)
     {
-        MyAdc.SampleReady = 0u;
         return;
     }
 
@@ -333,7 +325,6 @@ static void My_ADC_Trigger_Init(void)
         0u);
     if (AdcStatus != CY_ADC_SUCCESS)
     {
-        MyAdc.SampleReady = 0u;
         return;
     }
 
@@ -346,7 +337,7 @@ static void My_ADC_Trigger_Init(void)
 
     if (TriggerStatus != CY_TRIGMUX_SUCCESS)
     {
-        MyAdc.SampleReady = 0u;
+        return;
     }
 }
 
@@ -357,18 +348,10 @@ void My_ADC_Current_Init(void)
     gpio_init(ADC_FIRST_ISR_DEBUG_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
     gpio_init(ADC_BOTH_DONE_DEBUG_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
 
-    MyAdc.Adc1Raw = 0u;
-    MyAdc.Adc2Raw = 0u;
-    MyAdc.Adc1Filtered = 0u;
-    MyAdc.Adc2Filtered = 0u;
-    MyAdc.BatteryRaw = 0u;
-    MyAdc.BatteryVoltage = 0.0f;
-    MyAdc.SampleReady = 0u;
     Adc1SampleDone = 0u;
     Adc2SampleDone = 0u;
-
-    Sliding_Filter_Init(&ADC1_Filter, ADC1_FilterWindow, ADC_FILTER_WINDOW_SIZE);
-    Sliding_Filter_Init(&ADC2_Filter, ADC2_FilterWindow, ADC_FILTER_WINDOW_SIZE);
+    AdcLastRawU = 0u;
+    AdcLastRawV = 0u;
 
     My_ADC_Sar_Init(PASS0_SAR0, PCLK_PASS0_CLOCK_SAR0);
     My_ADC_Sar_Init(PASS0_SAR2, PCLK_PASS0_CLOCK_SAR2);
@@ -391,15 +374,17 @@ void My_ADC_Voltage_Init(void)
 
 uint16 My_ADC_GetBatteryRawValue(void)
 {
-    MyAdc.BatteryRaw = adc_convert(ADC_V_PIN);
-    return MyAdc.BatteryRaw;
+    return adc_convert(ADC_V_PIN);
 }
 
 float My_ADC_GetBatteryVoltage(void)
 {
-    MyAdc.BatteryRaw = adc_mean_filter_convert(ADC_V_PIN, 16u);
-    MyAdc.BatteryVoltage = (float)MyAdc.BatteryRaw * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
-    MyAdc.BatteryVoltage *= BATTERY_DIVIDER_RATIO * BATTERY_VOLTAGE_CALIBRATION;
+    uint16 BatteryRaw;
+    float BatteryVoltage;
 
-    return MyAdc.BatteryVoltage;
+    BatteryRaw = adc_mean_filter_convert(ADC_V_PIN, 16u);
+    BatteryVoltage = (float)BatteryRaw * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
+    BatteryVoltage *= BATTERY_DIVIDER_RATIO * BATTERY_VOLTAGE_CALIBRATION;
+
+    return BatteryVoltage;
 }

@@ -132,7 +132,7 @@ static void TCPWM_ADC_Trigger_Init(void)
     TCPWM0_GRP1_CNT0->unCTRL.stcField.u1CC1_MATCH_UP_EN    = 1u;
     TCPWM0_GRP1_CNT0->unCTRL.stcField.u1CC1_MATCH_DOWN_EN  = 0u;
 
-    TCPWM_Center_Interrupt_Init(); 
+    // TCPWM_Center_Interrupt_Init();
     Cy_Tcpwm_Pwm_Enable(TCPWM0_GRP1_CNT0);
 }
 
@@ -282,11 +282,25 @@ void My_TCPWM_Init(void)
 
 void My_TCPWM_Start(void)
 {
+    uint32 TriggerRetry;
+
     /* 公共触发线在芯片内部扇出到Group0的TRIG3和Group1的TRIG0 */
-    Cy_TrigMux_SwTrigger(
-        TRIG_OUT_MUX_4_TCPWM_ALL_CNT_TR_IN0,
-        TRIGGER_TYPE_EDGE,
-        1u);
+    for (TriggerRetry = 0u; TriggerRetry < 32u; TriggerRetry++)
+    {
+        if (Cy_TrigMux_SwTrigger(
+                TRIG_OUT_MUX_4_TCPWM_ALL_CNT_TR_IN0,
+                TRIGGER_TYPE_EDGE,
+                1u) == CY_TRIGMUX_SUCCESS)
+        {
+            break;
+        }
+    }
+
+    /* 公共触发未启动ADC计数器时，保证CC1采样事件能够运行 */
+    if (TCPWM0_GRP1_CNT0->unSTATUS.stcField.u1RUNNING == 0u)
+    {
+        Cy_Tcpwm_TriggerStart(TCPWM0_GRP1_CNT0);
+    }
 }
 
 void My_TCPWM_SetDuty(uint16 DutyA, uint16 DutyB, uint16 DutyC)

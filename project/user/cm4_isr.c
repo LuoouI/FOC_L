@@ -47,7 +47,7 @@ void pit0_ch0_isr()                     // 定时器通道 0 周期中断服务�
 void pit0_ch1_isr()                     // 定时器通道 1 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH1);
-    
+
 }
 
 void pit0_ch2_isr()                     // 定时器通道 2 周期中断服务函数      
@@ -60,18 +60,19 @@ void pit0_ch10_isr()                    // 定时器通道 10 周期中断服务
 {
     pit_isr_flag_clear(PIT_CH10);
     
-    // 按键扫描
-    key_scanner();
-
-    //LED电压检测
-    My_LED_Service(10u);
-
+   
 }
 
 void pit0_ch11_isr()                    // 定时器通道 11 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH11);
     
+     // 按键扫描
+    key_scanner();
+
+    // //LED电压检测
+    // My_LED_Service(10u);
+
 }
 
 void pit0_ch12_isr()                    // 定时器通道 12 周期中断服务函数      

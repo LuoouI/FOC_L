@@ -2,7 +2,6 @@
 #define MY_ADC_H
 
 #include "zf_common_headfile.h"
-#include "Filter/Sliding_Filter.h"
 
 #define ADC_1_PIN                         (ADC2_CH00_P18_0) // 电流采样引脚
 #define ADC_2_PIN                         (ADC0_CH17_P07_1) // 电流采样引脚
@@ -17,7 +16,6 @@
 #define ADC_CLOCK_DIVIDER_INDEX           (1u)         // SAR时钟分频器编号
 #define ADC_CLOCK_DIVIDER_VALUE           (5u)         // SAR时钟分频寄存器值
 #define ADC_SAMPLE_TIME                   (8u)         // ADC采样时间，单位为ADC时钟周期
-#define ADC_FILTER_WINDOW_SIZE            (32u)        // ADC滤波窗口长度
 #define ADC_FIRST_ISR_DEBUG_PIN           (P23_7)      // 每组首个ADC中断到达时翻转
 #define ADC_BOTH_DONE_DEBUG_PIN           (P02_1)      // 首个中断到达时两路已完成才翻转
 
@@ -35,22 +33,6 @@ typedef struct
     en_hsiom_sel_t              Hsiom;         // 模拟输入复用功能
     cy_en_intr_t                InterruptSource; // ADC通道系统中断源
 } AdcChannel_t;
-
-/*===========================================================================*/
-/*  ADC采样数据                                                               */
-/*===========================================================================*/
-typedef struct
-{
-    volatile uint16 Adc1Raw;          // ADC1原始采样值
-    volatile uint16 Adc2Raw;          // ADC2原始采样值
-    volatile uint16 Adc1Filtered;     // ADC1滑动平均值
-    volatile uint16 Adc2Filtered;     // ADC2滑动平均值
-    volatile uint16 BatteryRaw;       // 母线电压原始采样值
-    float BatteryVoltage;             // 母线电压，单位V
-    volatile uint8 SampleReady;       // 两路ADC采样完成标志
-} AdcData_t;
-
-extern AdcData_t MyAdc;
 
 /***********************************************
  * @brief : 初始化SAR ADC和模拟输入引脚
