@@ -54,13 +54,12 @@ int main(void)
     key_init(10);                       // 按键初始化
 
     My_ADC_Current_Init();              // ADC初始化
-    My_LED_Init();                      // LED初始化
+    // My_LED_Init();                      // LED初始化
 
     My_TCPWM_Init();                    // 三相互补PWM初始化
   
     My_TCPWM_Start();                   // 启动三相PWM
     
-    pit_us_init(PIT_CH1, 50);           // 50us  电流环(20kHz)
     pit_ms_init(PIT_CH10,10);           // 10ms  按键扫描
 
     // 此处编写用户代码 例如外设初始化代码等
@@ -69,7 +68,11 @@ int main(void)
         // 此处编写需要循环执行的代码   
         My_Key_Service();
     
-        printf("%d,%d\r\n",MyAdc.Adc1Raw,MyAdc.Adc2Raw);
+        // printf("%u,%u,%u,%u\r\n",
+        //        (uint32)MyAdc.Adc1Raw,
+        //        (uint32)MyAdc.Adc1Filtered,
+        //        (uint32)MyAdc.Adc2Raw,
+        //        (uint32)MyAdc.Adc2Filtered);
         // 此处编写需要循环执行的代码
     }
 }

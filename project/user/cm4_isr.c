@@ -48,7 +48,6 @@ void pit0_ch1_isr()                     // 定时器通道 1 周期中断服务�
 {
     pit_isr_flag_clear(PIT_CH1);
     
-    My_ADC_Sample();
 }
 
 void pit0_ch2_isr()                     // 定时器通道 2 周期中断服务函数      

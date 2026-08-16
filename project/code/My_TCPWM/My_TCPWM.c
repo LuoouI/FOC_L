@@ -17,6 +17,119 @@ static const TCPWM_3PHASE_T TCPWM_3PHASE =
 };
 
 /***********************************************
+ * @brief : 翻转TCPWM中心对齐周期调试引脚
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static void TCPWM_Center_DebugPin_Toggle(void)
+{
+    gpio_toggle_level(TCPWM_CENTER_DEBUG_PIN);
+}
+
+/***********************************************
+ * @brief : TCPWM中心对齐周期中断服务函数
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static void TCPWM_Center_ISR(void)
+{
+    if (Cy_Tcpwm_Counter_GetTC_IntrMasked(TCPWM0_GRP1_CNT0) != 0u)
+    {
+        Cy_Tcpwm_Counter_ClearTC_Intr(TCPWM0_GRP1_CNT0);
+        TCPWM_Center_DebugPin_Toggle();
+    }
+}
+
+/***********************************************
+ * @brief : 初始化TCPWM中心对齐周期调试中断
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static void TCPWM_Center_Interrupt_Init(void)
+{
+    cy_stc_sysint_irq_t InterruptConfig;
+
+    memset(&InterruptConfig, 0, sizeof(InterruptConfig));
+    InterruptConfig.sysIntSrc = tcpwm_0_interrupts_256_IRQn;
+    InterruptConfig.intIdx = CPUIntIdx4_IRQn;
+    InterruptConfig.isEnabled = true;
+
+    gpio_init(TCPWM_CENTER_DEBUG_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
+    Cy_Tcpwm_Counter_ClearTC_Intr(TCPWM0_GRP1_CNT0);
+    interrupt_init(&InterruptConfig, TCPWM_Center_ISR, 1u);
+}
+
+/***********************************************
+ * @brief : 初始化ADC专用CC1采样事件计数器
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static void TCPWM_ADC_Trigger_Init(void)
+{
+    cy_stc_tcpwm_pwm_config_t AdcTriggerConfig;
+
+    Cy_SysClk_PeriphAssignDivider(
+        PCLK_TCPWM0_CLOCKS256,
+        CY_SYSCLK_DIV_16_BIT,
+        2u);
+
+    Cy_SysClk_PeriphSetDivider(
+        CY_SYSCLK_DIV_16_BIT,
+        2u,
+        0u);
+
+    Cy_SysClk_PeriphEnableDivider(
+        CY_SYSCLK_DIV_16_BIT,
+        2u);
+
+    memset(&AdcTriggerConfig, 0, sizeof(AdcTriggerConfig));
+    Cy_Tcpwm_Pwm_DeInit(TCPWM0_GRP1_CNT0);
+
+    AdcTriggerConfig.pwmMode            = CY_TCPWM_PWM_MODE_DEADTIME;
+    AdcTriggerConfig.clockPrescaler     = CY_TCPWM_PRESCALER_DIVBY_1;
+    AdcTriggerConfig.debug_pause        = false;
+    AdcTriggerConfig.deadTime           = 0u;
+    AdcTriggerConfig.runMode            = CY_TCPWM_PWM_CONTINUOUS;
+    AdcTriggerConfig.countDirection     = CY_TCPWM_COUNTER_COUNT_UP_DOWN1;
+    AdcTriggerConfig.cc0MatchMode       = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
+    AdcTriggerConfig.overflowMode       = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
+    AdcTriggerConfig.underflowMode      = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
+    AdcTriggerConfig.cc1MatchMode       = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
+    AdcTriggerConfig.period             = TCPWM_PERIOD;
+    AdcTriggerConfig.compare0           = TCPWM_PERIOD / 2u;
+    AdcTriggerConfig.compare1           = TCPWM_ADC_SAMPLE_COUNT;
+    AdcTriggerConfig.compare1_buff      = TCPWM_ADC_SAMPLE_COUNT;
+    /* COUNT_UP_DOWN1的TC仅在向下计数到零时产生，作为中心对齐周期基准 */
+    AdcTriggerConfig.interruptSources   = CY_TCPWM_INT_ON_TC;
+    AdcTriggerConfig.killMode           = CY_TCPWM_PWM_NOT_STOP_ON_KILL;
+    AdcTriggerConfig.startInputMode     = CY_TCPWM_INPUT_RISING_EDGE;
+    AdcTriggerConfig.startInput         = CY_TCPWM_INPUT_TRIG0;
+    AdcTriggerConfig.countInputMode     = CY_TCPWM_INPUT_LEVEL;
+    AdcTriggerConfig.countInput         = CY_TCPWM_INPUT1;
+    AdcTriggerConfig.pwmOnDisable       = CY_TCPWM_PWM_OUT_MODE_LOW;
+    AdcTriggerConfig.trigger0EventCfg   = CY_TCPWM_COUNTER_DISABLED;
+    AdcTriggerConfig.trigger1EventCfg   = CY_TCPWM_COUNTER_CC1_MATCH;
+
+    Cy_Tcpwm_Pwm_Init(TCPWM0_GRP1_CNT0, &AdcTriggerConfig);
+
+    TCPWM0_GRP1_CNT0->unCTRL.stcField.u1CC0_MATCH_UP_EN    = 0u;
+    TCPWM0_GRP1_CNT0->unCTRL.stcField.u1CC0_MATCH_DOWN_EN  = 0u;
+    TCPWM0_GRP1_CNT0->unCTRL.stcField.u1CC1_MATCH_UP_EN    = 1u;
+    TCPWM0_GRP1_CNT0->unCTRL.stcField.u1CC1_MATCH_DOWN_EN  = 0u;
+
+    // TCPWM_Center_Interrupt_Init();
+    Cy_Tcpwm_Pwm_Enable(TCPWM0_GRP1_CNT0);
+}
+
+/***********************************************
  * @brief : 初始化单相桥臂PWM引脚
  * @param : phase 单相桥臂硬件描述
  * @return: void
@@ -93,7 +206,7 @@ static void TCPWM_Phase_Init(const TCPWM_PHASE_t *phase)
     TCPWM_config.countInputMode     = CY_TCPWM_INPUT_LEVEL;
     TCPWM_config.countInput         = 1uL;
     TCPWM_config.startInputMode     = CY_TCPWM_INPUT_RISING_EDGE;
-    TCPWM_config.startInput         = CY_TCPWM_INPUT_TRIG3;
+    TCPWM_config.startInput         = CY_TCPWM_INPUT_TRIG0;
     TCPWM_config.pwmOnDisable       = CY_TCPWM_PWM_OUT_MODE_LOW;
     TCPWM_config.trigger0EventCfg   = CY_TCPWM_COUNTER_DISABLED;
     TCPWM_config.trigger1EventCfg   = CY_TCPWM_COUNTER_DISABLED;
@@ -146,11 +259,12 @@ void My_TCPWM_Init(void)
     TCPWM_SinglePhase_Init(&TCPWM_3PHASE.a);
     TCPWM_SinglePhase_Init(&TCPWM_3PHASE.b);
     TCPWM_SinglePhase_Init(&TCPWM_3PHASE.c);
+    TCPWM_ADC_Trigger_Init();
 }
 
 void My_TCPWM_Start(void)
 {
-    /* 使用TCPWM公共触发输入，让三相计数器在同一个硬件触发沿启动 */
+    /* 使用TCPWM公共触发输入，让三相PWM和ADC事件计数器同步启动 */
     Cy_TrigMux_SwTrigger(
         TRIG_OUT_MUX_4_TCPWM_ALL_CNT_TR_IN0,
         TRIGGER_TYPE_EDGE,

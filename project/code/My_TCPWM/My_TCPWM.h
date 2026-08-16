@@ -3,8 +3,10 @@
 
 #include "zf_common_headfile.h"
 
-#define TCPWM_PERIOD      (2000u)      // 20kHz中心对齐PWM周期计数值
-#define TCPWM_DUTY_MAX    (10000u)     // PWM占空比最大值，对应100%
+#define TCPWM_PERIOD             (2000u)      // 20kHz中心对齐PWM周期计数值
+#define TCPWM_DUTY_MAX           (10000u)     // PWM占空比最大值，对应100%
+#define TCPWM_ADC_SAMPLE_COUNT   (200u)       // ADC采样事件比较值，需要按硬件建立时间调整
+#define TCPWM_CENTER_DEBUG_PIN   (P23_3)      // 中心对齐周期基准调试引脚
 
 /*===========================================================================*/
 /*  单相桥臂硬件描述                                                          */

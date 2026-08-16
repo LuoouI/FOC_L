@@ -1,6 +1,14 @@
 #include "My_ADC.h"
+#include "adc/cy_adc.h"
+#include "trigmux/cy_trigmux.h"
 
 AdcData_t MyAdc = {0};
+static Sliding_Filter_t ADC1_Filter;
+static Sliding_Filter_t ADC2_Filter;
+static float ADC1_FilterWindow[ADC_FILTER_WINDOW_SIZE];
+static float ADC2_FilterWindow[ADC_FILTER_WINDOW_SIZE];
+static volatile uint8 Adc1SampleDone = 0u;
+static volatile uint8 Adc2SampleDone = 0u;
 
 /*===========================================================================*/
 /*  两路电流ADC硬件描述                                                       */
@@ -11,15 +19,21 @@ static const AdcChannel_t AdcChannels[] =
         PASS0_SAR2,
         PASS0_SAR2_CH0,
         CY_ADC_PIN_ADDRESS_AN0,
+        CY_ADC_PORT_ADDRESS_SARMUX0,
         P18_0_PORT,
-        P18_0_PIN
+        P18_0_PIN,
+        P18_0_AMUXA,
+        pass_0_interrupts_sar_64_IRQn
     },
     {
         PASS0_SAR0,
-        PASS0_SAR0_CH8,
-        CY_ADC_PIN_ADDRESS_AN8,
-        P7_0_PORT,
-        P7_0_PIN
+        PASS0_SAR0_CH9,
+        CY_ADC_PIN_ADDRESS_AN9,
+        CY_ADC_PORT_ADDRESS_SARMUX0,
+        P7_1_PORT,
+        P7_1_PIN,
+        P7_1_AMUXA,
+        pass_0_interrupts_sar_9_IRQn
     }
 };
 
@@ -51,15 +65,17 @@ static void My_ADC_Clock_Init(en_clk_dst_t ClockDst)
  * @brief : 配置ADC模拟输入引脚
  * @param : Port GPIO端口
  * @param : Pin 端口内引脚编号
+ * @param : Hsiom 模拟输入复用功能
  * @return: void
  * @date  : 2026-08-15
  * @author: LYF
  ************************************************/
-static void My_ADC_Pin_Init(volatile stc_GPIO_PRT_t *Port, uint32 Pin)
+static void My_ADC_Pin_Init(volatile stc_GPIO_PRT_t *Port, uint32 Pin, en_hsiom_sel_t Hsiom)
 {
     cy_stc_gpio_pin_config_t PinConfig = {0};
 
     PinConfig.driveMode = CY_GPIO_DM_ANALOG;
+    PinConfig.hsiom = Hsiom;
     Cy_GPIO_Pin_Init(Port, Pin, &PinConfig);
 }
 
@@ -98,16 +114,16 @@ static void My_ADC_Channel_Init(const AdcChannel_t *AdcChannel)
 
     memset(&ChannelConfig, 0, sizeof(ChannelConfig));
 
-    My_ADC_Pin_Init(AdcChannel->Port, AdcChannel->Pin);
+    My_ADC_Pin_Init(AdcChannel->Port, AdcChannel->Pin, AdcChannel->Hsiom);
     Cy_Adc_Channel_DeInit(AdcChannel->Channel);
 
-    ChannelConfig.triggerSelection = CY_ADC_TRIGGER_OFF;
+    ChannelConfig.triggerSelection = CY_ADC_TRIGGER_GENERIC0;
     ChannelConfig.channelPriority = 0u;
     ChannelConfig.preenptionType = CY_ADC_PREEMPTION_FINISH_RESUME;
     ChannelConfig.isGroupEnd = true;
     ChannelConfig.doneLevel = CY_ADC_DONE_LEVEL_LEVEL;
     ChannelConfig.pinAddress = AdcChannel->PinAddress;
-    ChannelConfig.portAddress = CY_ADC_PORT_ADDRESS_SARMUX0;
+    ChannelConfig.portAddress = AdcChannel->PortAddress;
     ChannelConfig.extMuxEnable = false;
     ChannelConfig.preconditionMode = CY_ADC_PRECONDITION_MODE_OFF;
     ChannelConfig.overlapDiagMode = CY_ADC_OVERLAP_DIAG_MODE_OFF;
@@ -117,58 +133,246 @@ static void My_ADC_Channel_Init(const AdcChannel_t *AdcChannel)
     ChannelConfig.resultAlignment = CY_ADC_RESULT_ALIGNMENT_RIGHT;
     ChannelConfig.signExtention = CY_ADC_SIGN_EXTENTION_UNSIGNED;
     ChannelConfig.rightShift = 0u;
+    ChannelConfig.mask.grpDone = true;
 
     Cy_Adc_Channel_Init(AdcChannel->Channel, &ChannelConfig);
     Cy_Adc_Channel_Enable(AdcChannel->Channel);
 }
 
 /***********************************************
- * @brief : 软件触发并读取一个SAR ADC通道
+ * @brief : 读取一个硬件触发SAR ADC通道的最近结果
  * @param : AdcChannel ADC通道硬件描述
+ * @param : LastValue 上一次有效采样值
  * @return: ADC原始采样值
- * @date  : 2026-08-15
+ * @date  : 2026-08-16
  * @author: LYF
  ************************************************/
-static uint16 My_ADC_ReadChannel(const AdcChannel_t *AdcChannel)
+static uint16 My_ADC_ReadResult(const AdcChannel_t *AdcChannel, uint16 LastValue)
 {
     uint16 AdcValue = 0u;
     cy_stc_adc_ch_status_t AdcStatus = {0};
-
-    Cy_Adc_Channel_SoftwareTrigger(AdcChannel->Channel);
-
-    while (AdcChannel->Sar->unSTATUS.stcField.u1BUSY != 0u)
-    {
-    }
 
     if (Cy_Adc_Channel_GetResult(
             AdcChannel->Channel,
             &AdcValue,
             &AdcStatus) != CY_ADC_SUCCESS)
     {
-        return 0u;
+        return LastValue;
     }
 
     if (!AdcStatus.valid)
     {
-        return 0u;
+        return LastValue;
     }
 
     return AdcValue;
+}
+
+/***********************************************
+ * @brief : 检查两路ADC组转换完成标志
+ * @param : ChannelIndex 当前中断对应的ADC通道索引
+ * @return: true两路均已完成，false至少一路未完成
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static bool My_ADC_IsBothGroupDone(uint32 ChannelIndex)
+{
+    uint32 OtherChannelIndex;
+    uint32 OtherInterruptStatus;
+
+    OtherChannelIndex = (ChannelIndex == 0u) ? 1u : 0u;
+    OtherInterruptStatus =
+        AdcChannels[OtherChannelIndex].Channel->unINTR_MASKED.u32Register;
+
+    return ((OtherInterruptStatus &
+             PASS_SAR_CH_INTR_MASKED_GRP_DONE_MASKED_Msk) != 0u);
+}
+
+/***********************************************
+ * @brief : 处理单路ADC转换完成中断
+ * @param : ChannelIndex ADC通道描述数组索引
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
+{
+    cy_stc_adc_interrupt_source_t InterruptStatus = {0};
+    bool IsFirstInterrupt;
+    bool BothGroupDoneAtEntry = false;
+
+    IsFirstInterrupt = ((Adc1SampleDone == 0u) && (Adc2SampleDone == 0u));
+    if (IsFirstInterrupt)
+    {
+        /* 在中断处理之前锁存两路硬件完成状态 */
+        BothGroupDoneAtEntry = My_ADC_IsBothGroupDone(ChannelIndex);
+    }
+
+    if (Cy_Adc_Channel_GetInterruptMaskedStatus(
+            AdcChannels[ChannelIndex].Channel,
+            &InterruptStatus) != CY_ADC_SUCCESS)
+    {
+        return;
+    }
+
+    if (!InterruptStatus.grpDone)
+    {
+        return;
+    }
+
+    if (IsFirstInterrupt)
+    {
+        MyAdc.SampleReady = 0u;
+        gpio_toggle_level(ADC_FIRST_ISR_DEBUG_PIN);
+        if (BothGroupDoneAtEntry)
+        {
+            gpio_toggle_level(ADC_BOTH_DONE_DEBUG_PIN);
+        }
+    }
+
+    if (ChannelIndex == 0u)
+    {
+        MyAdc.Adc1Raw = My_ADC_ReadResult(&AdcChannels[0], MyAdc.Adc1Raw);
+        Adc1SampleDone = 1u;
+    }
+    else
+    {
+        MyAdc.Adc2Raw = My_ADC_ReadResult(&AdcChannels[1], MyAdc.Adc2Raw);
+        Adc2SampleDone = 1u;
+    }
+
+    Cy_Adc_Channel_ClearInterruptStatus(
+        AdcChannels[ChannelIndex].Channel,
+        &InterruptStatus);
+
+    if ((Adc1SampleDone != 0u) && (Adc2SampleDone != 0u))
+    {
+        Sliding_Filter_Update(&ADC1_Filter, (float)MyAdc.Adc1Raw);
+        Sliding_Filter_Update(&ADC2_Filter, (float)MyAdc.Adc2Raw);
+        MyAdc.Adc1Filtered = Sliding_Filter_GetUint16(&ADC1_Filter);
+        MyAdc.Adc2Filtered = Sliding_Filter_GetUint16(&ADC2_Filter);
+        Adc1SampleDone = 0u;
+        Adc2SampleDone = 0u;
+        MyAdc.SampleReady = 1u;
+    }
+}
+
+/***********************************************
+ * @brief : ADC1转换完成中断服务函数
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static void My_ADC1_ISR(void)
+{
+    My_ADC_Interrupt_Handle(0u);
+}
+
+/***********************************************
+ * @brief : ADC2转换完成中断服务函数
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static void My_ADC2_ISR(void)
+{
+    My_ADC_Interrupt_Handle(1u);
+}
+
+/***********************************************
+ * @brief : 初始化两路ADC转换完成中断
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static void My_ADC_Interrupt_Init(void)
+{
+    cy_stc_sysint_irq_t InterruptConfig;
+
+    memset(&InterruptConfig, 0, sizeof(InterruptConfig));
+    InterruptConfig.sysIntSrc = AdcChannels[0].InterruptSource;
+    InterruptConfig.intIdx = CPUIntIdx5_IRQn;
+    InterruptConfig.isEnabled = true;
+    interrupt_init(&InterruptConfig, My_ADC1_ISR, 2u);
+
+    InterruptConfig.sysIntSrc = AdcChannels[1].InterruptSource;
+    InterruptConfig.intIdx = CPUIntIdx6_IRQn;
+    interrupt_init(&InterruptConfig, My_ADC2_ISR, 2u);
+}
+
+/***********************************************
+ * @brief : 配置TCPWM CC1到PASS通用ADC触发线
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: LYF
+ ************************************************/
+static void My_ADC_Trigger_Init(void)
+{
+    cy_en_trigmux_status_t TriggerStatus;
+    cy_en_adc_status_t AdcStatus;
+
+    AdcStatus = Cy_Adc_SetGenericTriggerInput(
+        PASS0_EPASS_MMIO,
+        0u,
+        0u,
+        0u);
+    if (AdcStatus != CY_ADC_SUCCESS)
+    {
+        MyAdc.SampleReady = 0u;
+        return;
+    }
+
+    AdcStatus = Cy_Adc_SetGenericTriggerInput(
+        PASS0_EPASS_MMIO,
+        2u,
+        0u,
+        0u);
+    if (AdcStatus != CY_ADC_SUCCESS)
+    {
+        MyAdc.SampleReady = 0u;
+        return;
+    }
+
+    TriggerStatus = Cy_TrigMux_Connect(
+        TRIG_IN_MUX_6_TCPWM_16M_TR_OUT10,
+        TRIG_OUT_MUX_6_PASS_GEN_TR_IN0,
+        CY_TR_MUX_TR_INV_DISABLE,
+        TRIGGER_TYPE_EDGE,
+        0u);
+
+    if (TriggerStatus != CY_TRIGMUX_SUCCESS)
+    {
+        MyAdc.SampleReady = 0u;
+    }
 }
 
 void My_ADC_Current_Init(void)
 {
     uint32 ChannelIndex;
 
+    gpio_init(ADC_FIRST_ISR_DEBUG_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
+    gpio_init(ADC_BOTH_DONE_DEBUG_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
+
     MyAdc.Adc1Raw = 0u;
     MyAdc.Adc2Raw = 0u;
+    MyAdc.Adc1Filtered = 0u;
+    MyAdc.Adc2Filtered = 0u;
     MyAdc.BatteryRaw = 0u;
     MyAdc.BatteryVoltage = 0.0f;
     MyAdc.SampleReady = 0u;
+    Adc1SampleDone = 0u;
+    Adc2SampleDone = 0u;
+
+    Sliding_Filter_Init(&ADC1_Filter, ADC1_FilterWindow, ADC_FILTER_WINDOW_SIZE);
+    Sliding_Filter_Init(&ADC2_Filter, ADC2_FilterWindow, ADC_FILTER_WINDOW_SIZE);
 
     My_ADC_Sar_Init(PASS0_SAR0, PCLK_PASS0_CLOCK_SAR0);
     My_ADC_Sar_Init(PASS0_SAR2, PCLK_PASS0_CLOCK_SAR2);
-    // My_ADC_Sar_Init(PASS0_SAR1, PCLK_PASS0_CLOCK_SAR1);
+    My_ADC_Trigger_Init();
     
     for (ChannelIndex = 0u;
          ChannelIndex < (sizeof(AdcChannels) / sizeof(AdcChannels[0]));
@@ -176,29 +380,13 @@ void My_ADC_Current_Init(void)
     {
         My_ADC_Channel_Init(&AdcChannels[ChannelIndex]);
     }
+
+    My_ADC_Interrupt_Init();
 }
 
 void My_ADC_Voltage_Init(void)
 {
     adc_init(ADC_V_PIN, ADC_12BIT);
-}
-
-void My_ADC_Sample(void)
-{
-    MyAdc.SampleReady = 0u;
-    MyAdc.Adc1Raw = My_ADC_ReadChannel(&AdcChannels[0]);
-    MyAdc.Adc2Raw = My_ADC_ReadChannel(&AdcChannels[1]);
-    MyAdc.SampleReady = 1u;
-}
-
-uint16 My_ADC_GetAdc1Value(void)
-{
-    return MyAdc.Adc1Raw;
-}
-
-uint16 My_ADC_GetAdc2Value(void)
-{
-    return MyAdc.Adc2Raw;
 }
 
 uint16 My_ADC_GetBatteryRawValue(void)
