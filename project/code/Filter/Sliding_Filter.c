@@ -1,5 +1,4 @@
 #include "Sliding_Filter.h"
-#include "Function/Function.h"
 
 /***********************************************
  * @brief : 将浮点滤波结果四舍五入并限制为uint16范围
@@ -10,8 +9,17 @@
  ************************************************/
 static uint16 Sliding_Filter_ToUint16(float Value)
 {
-    Value = Float_Limit(Value + 0.5f, 0.0f, 65535.0f);
-    return (uint16)Value;
+    if (Value <= 0.0F)
+    {
+        return 0U;
+    }
+
+    if (Value >= 65535.0F)
+    {
+        return 65535U;
+    }
+
+    return (uint16)(Value + 0.5F);
 }
 
 void Sliding_Filter_Init(Sliding_Filter_t *Filter, float *WindowData, uint8 WindowSize)

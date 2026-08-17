@@ -1,5 +1,4 @@
 #include "Fast_sin.h"
-#include "Function/Function.h"
 
 #define FAST_SIN_QUARTER_COUNT    (512u)      // 四分之一周期采样点数
 #define FAST_SIN_SCALE            (10000)     // 查表定标系数
@@ -62,13 +61,13 @@ static int32 FastSinLookup(uint16 Angle)
     int32 Value1;
     int32 Value;
 
-    Angle &= ANGLE_MAX;
+    Angle &= 0x7FFFu;
     Quadrant = Angle >> 13u;
     Phase = Angle & 0x1FFFu;
 
     if ((Quadrant & 1u) != 0u)
     {
-        Phase = ANGLE_QUARTER_PERIOD - Phase;
+        Phase = 8192u - Phase;
     }
 
     Index = Phase >> FAST_SIN_STEP_SHIFT;
@@ -94,7 +93,7 @@ float fast_sinf(uint16 ElectricalAngle)
 
 float fast_cosf(uint16 ElectricalAngle)
 {
-    return (float)FastSinLookup(
-               (uint16)(ElectricalAngle + ANGLE_QUARTER_PERIOD)) /
+    return (float)FastSinLookup((uint16)(ElectricalAngle + 8192u)) /
            (float)FAST_SIN_SCALE;
 }
+

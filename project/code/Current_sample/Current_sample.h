@@ -3,13 +3,12 @@
 
 #include "zf_common_headfile.h"
 #include "Filter/Sliding_Filter.h"
-#include "Foc_transform/Foc_transform.h"
 
 #define CURRENT_SAMPLE_ADC_REF_VOLTAGE       (3.3f)       // ADC参考电压
 #define CURRENT_SAMPLE_ADC_MAX_VALUE         (4095.0f)    // 12位ADC最大采样值
 #define CURRENT_SAMPLE_AMPLIFIER_GAIN        (20.0f)      // 电流采样运放增益
 #define CURRENT_SAMPLE_SHUNT_RESISTANCE      (0.002f)     // 电流采样电阻，单位为欧姆
-#define CURRENT_SAMPLE_FILTER_WINDOW_SIZE    (3u)         // 电流采样滤波窗口长度
+#define CURRENT_SAMPLE_FILTER_WINDOW_SIZE    (16u)         // 电流采样滤波窗口长度
 #define CURRENT_SAMPLE_CALIBRATION_COUNT     (256u)       // 零电流状态下的偏置校准次数
 
 /*===========================================================================*/
@@ -33,14 +32,11 @@ typedef struct
     float current_v;        // V相电流，单位为安培
     float current_w;        // W相电流，单位为安培
 
-    Clark_t clark;          // Clarke变换结果
-    Park_t park;             // Park变换结果
-
     uint8 calibrated;       // 偏置校准完成标志
     uint8 sample_ready;     // 新的一组三相电流数据准备完成标志
 } motor_current_t;
 
-extern volatile motor_current_t Current;
+extern volatile motor_current_t CurrentSample;
 
 /***********************************************
  * @brief : 初始化三相电流采样数据和滤波器
@@ -69,14 +65,5 @@ void Current_Sample_StartCalibration(void);
  * @author: LYF
  ************************************************/
 void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV);
-
-/***********************************************
- * @brief : 根据当前三相电流和电角度更新Clark、Park变换结果
- * @param : ElectricalAngle 电角度，0~32767对应0~2PI
- * @return: void
- * @date  : 2026-08-17
- * @author: LYF
- ************************************************/
-void Current_Sample_Transform(uint16 ElectricalAngle);
 
 #endif
