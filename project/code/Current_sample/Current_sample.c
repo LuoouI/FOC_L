@@ -1,6 +1,7 @@
 #include "Current_sample.h"
+#include "Function/Function.h"
 
-volatile motor_current_t CurrentSample = {0};
+volatile motor_current_t Current = {0};
 
 static Sliding_Filter_t Cur_FilterU;
 static Sliding_Filter_t Cur_FilterV;
@@ -9,28 +10,6 @@ static float Cur_FilterBufV[CURRENT_SAMPLE_FILTER_WINDOW_SIZE];
 static uint32 Cur_CalSumU;
 static uint32 Cur_CalSumV;
 static uint16 Cur_CalCount;
-
-/***********************************************
- * @brief : 将校准后的ADC值限制到int16范围
- * @param : Value 待限制的ADC值
- * @return: 限制后的int16值
- * @date  : 2026-08-17
- * @author: LYF
- ************************************************/
-static int16 Current_Sample_LimitInt16(int32 Value)
-{
-    if (Value > 32767)
-    {
-        return 32767;
-    }
-
-    if (Value < -32768)
-    {
-        return -32768;
-    }
-
-    return (int16)Value;
-}
 
 /***********************************************
  * @brief : 将扣除零偏后的ADC值换算为电流
@@ -61,38 +40,40 @@ static void Current_Sample_UpdateCal(uint16 FilterU, uint16 FilterV)
     int32 CalV;
     int32 CalW;
 
-    CalU = (int32)FilterU - (int32)CurrentSample.offset_u;
-    CalV = (int32)FilterV - (int32)CurrentSample.offset_v;
+    CalU = (int32)FilterU - (int32)Current.offset_u;
+    CalV = (int32)FilterV - (int32)Current.offset_v;
     CalW = -(CalU + CalV);
 
-    CurrentSample.adc_cal_u = Current_Sample_LimitInt16(CalU);
-    CurrentSample.adc_cal_v = Current_Sample_LimitInt16(CalV);
-    CurrentSample.adc_cal_w = Current_Sample_LimitInt16(CalW);
+    Current.adc_cal_u = (int16)Int_Limit(CalU, -32768, 32767);
+    Current.adc_cal_v = (int16)Int_Limit(CalV, -32768, 32767);
+    Current.adc_cal_w = (int16)Int_Limit(CalW, -32768, 32767);
 
-    CurrentSample.current_u =
-        Current_Sample_AdcToCurrent(CurrentSample.adc_cal_u);
-    CurrentSample.current_v =
-        Current_Sample_AdcToCurrent(CurrentSample.adc_cal_v);
-    CurrentSample.current_w =
-        Current_Sample_AdcToCurrent(CurrentSample.adc_cal_w);
+    Current.current_u =
+        Current_Sample_AdcToCurrent(Current.adc_cal_u);
+    Current.current_v =
+        Current_Sample_AdcToCurrent(Current.adc_cal_v);
+    Current.current_w =
+        Current_Sample_AdcToCurrent(Current.adc_cal_w);
 }
 
 void Current_Sample_Init(void)
 {
-    CurrentSample.adc_raw_u = 0u;
-    CurrentSample.adc_raw_v = 0u;
-    CurrentSample.adc_raw_w = 0u;
-    CurrentSample.offset_u = 0u;
-    CurrentSample.offset_v = 0u;
-    CurrentSample.offset_w = 0u;
-    CurrentSample.adc_cal_u = 0;
-    CurrentSample.adc_cal_v = 0;
-    CurrentSample.adc_cal_w = 0;
-    CurrentSample.current_u = 0.0f;
-    CurrentSample.current_v = 0.0f;
-    CurrentSample.current_w = 0.0f;
-    CurrentSample.calibrated = 0u;
-    CurrentSample.sample_ready = 0u;
+    Current.adc_raw_u = 0u;
+    Current.adc_raw_v = 0u;
+    Current.adc_raw_w = 0u;
+    Current.offset_u = 0u;
+    Current.offset_v = 0u;
+    Current.offset_w = 0u;
+    Current.adc_cal_u = 0;
+    Current.adc_cal_v = 0;
+    Current.adc_cal_w = 0;
+    Current.current_u = 0.0f;
+    Current.current_v = 0.0f;
+    Current.current_w = 0.0f;
+    Current.clark = (Clark_t){0.0f, 0.0f};
+    Current.park = (Park_t){0.0f, 0.0f};
+    Current.calibrated = 0u;
+    Current.sample_ready = 0u;
 
     Current_Sample_StartCalibration();
 }
@@ -112,17 +93,19 @@ void Current_Sample_StartCalibration(void)
     Cur_CalSumV = 0u;
     Cur_CalCount = 0u;
 
-    CurrentSample.offset_u = 0u;
-    CurrentSample.offset_v = 0u;
-    CurrentSample.offset_w = 0u;
-    CurrentSample.adc_cal_u = 0;
-    CurrentSample.adc_cal_v = 0;
-    CurrentSample.adc_cal_w = 0;
-    CurrentSample.current_u = 0.0f;
-    CurrentSample.current_v = 0.0f;
-    CurrentSample.current_w = 0.0f;
-    CurrentSample.calibrated = 0u;
-    CurrentSample.sample_ready = 0u;
+    Current.offset_u = 0u;
+    Current.offset_v = 0u;
+    Current.offset_w = 0u;
+    Current.adc_cal_u = 0;
+    Current.adc_cal_v = 0;
+    Current.adc_cal_w = 0;
+    Current.current_u = 0.0f;
+    Current.current_v = 0.0f;
+    Current.current_w = 0.0f;
+    Current.clark = (Clark_t){0.0f, 0.0f};
+    Current.park = (Park_t){0.0f, 0.0f};
+    Current.calibrated = 0u;
+    Current.sample_ready = 0u;
 }
 
 void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV)
@@ -130,17 +113,18 @@ void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV)
     uint16 FilterU;
     uint16 FilterV;
 
-    CurrentSample.adc_raw_u = AdcRawU;
-    CurrentSample.adc_raw_v = AdcRawV;
-    CurrentSample.adc_raw_w = 0u;
+    Current.adc_raw_u = AdcRawU;
+    Current.adc_raw_v = AdcRawV;
+    Current.adc_raw_w = 0u;
 
     Sliding_Filter_Update(&Cur_FilterU, (float)AdcRawU);
     Sliding_Filter_Update(&Cur_FilterV, (float)AdcRawV);
+
     /* 去掉窗口内一个最大值和一个最小值，避免单次开关尖峰进入电流值 */
     FilterU = Sliding_Filter_GetTrimmedUint16(&Cur_FilterU);
     FilterV = Sliding_Filter_GetTrimmedUint16(&Cur_FilterV);
 
-    if (CurrentSample.calibrated == 0u)
+    if (Current.calibrated == 0u)
     {
         Cur_CalSumU += (uint32)AdcRawU;
         Cur_CalSumV += (uint32)AdcRawV;
@@ -149,29 +133,46 @@ void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV)
         if (Cur_CalCount >=
             CURRENT_SAMPLE_CALIBRATION_COUNT)
         {
-            CurrentSample.offset_u = (uint16)
-                (Cur_CalSumU /
-                 CURRENT_SAMPLE_CALIBRATION_COUNT);
-            CurrentSample.offset_v = (uint16)
-                (Cur_CalSumV /
-                 CURRENT_SAMPLE_CALIBRATION_COUNT);
-            CurrentSample.calibrated = 1u;
+            // Current.offset_u = (uint16)
+            //     (Cur_CalSumU /
+            //      CURRENT_SAMPLE_CALIBRATION_COUNT);
+            // Current.offset_v = (uint16)
+            //     (Cur_CalSumV /
+            //      CURRENT_SAMPLE_CALIBRATION_COUNT);
+
+            /*实测值*/
+            Current.offset_u = 2049;
+            Current.offset_v = 2051;
+
+            Current.calibrated = 1u;
         }
     }
 
-    if (CurrentSample.calibrated != 0u)
+    if (Current.calibrated != 0u)
     {
         Current_Sample_UpdateCal(FilterU, FilterV);
     }
     else
     {
-        CurrentSample.adc_cal_u = 0;
-        CurrentSample.adc_cal_v = 0;
-        CurrentSample.adc_cal_w = 0;
-        CurrentSample.current_u = 0.0f;
-        CurrentSample.current_v = 0.0f;
-        CurrentSample.current_w = 0.0f;
+        Current.adc_cal_u = 0;
+        Current.adc_cal_v = 0;
+        Current.adc_cal_w = 0;
+        Current.current_u = 0.0f;
+        Current.current_v = 0.0f;
+        Current.current_w = 0.0f;
+        Current.clark = (Clark_t){0.0f, 0.0f};
+        Current.park = (Park_t){0.0f, 0.0f};
     }
 
-    CurrentSample.sample_ready = 1u;
+    Current.sample_ready = 1u;
+}
+
+void Current_Sample_Transform(uint16 ElectricalAngle)
+{
+    Current.clark = foc_clark_calc(
+        Current.current_u,
+        Current.current_v);
+    Current.park = foc_park_calc(
+        Current.clark,
+        ElectricalAngle);
 }

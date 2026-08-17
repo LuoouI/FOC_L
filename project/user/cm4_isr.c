@@ -41,37 +41,38 @@ void pit0_ch0_isr()                     // 定时器通道 0 周期中断服务�
 {
     pit_isr_flag_clear(PIT_CH0);
   
-    
 }
 
 void pit0_ch1_isr()                     // 定时器通道 1 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH1);
-
 }
 
 void pit0_ch2_isr()                     // 定时器通道 2 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH2);
     
+    VBUS_Get();    // 获取母线电压
+
 }
 
 void pit0_ch10_isr()                    // 定时器通道 10 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH10);
     
-   
+   //勿动（计数器和adc冲突）
 }
 
 void pit0_ch11_isr()                    // 定时器通道 11 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH11);
     
-     // 按键扫描
+    // 按键扫描
     key_scanner();
 
-    // //LED电压检测
-    // My_LED_Service(10u);
+    // LED服务函数
+    My_LED_CheckVoltage();
+    My_LED_Service(10u);
 
 }
 

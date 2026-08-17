@@ -8,7 +8,12 @@
 #include "My_TCPWM/My_TCPWM.h"
 #include "My_Key/My_Key.h"
 #include "My_LED/My_LED.h"
+#include "Function/Function.h"
 #include "Fast_sin/Fast_sin.h"
 #include "Foc_transform/Foc_transform.h"
+#include "PID/PID.h"
+#include "SVPWM/SVPWM.h"
+#include "Motor_Control/Motor_Control.h"
+#include "Motor_Flash/Motor_Flash.h"
 
 #endif // MY_HEADFILE_H
