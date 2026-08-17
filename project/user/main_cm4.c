@@ -55,6 +55,12 @@ int main(void)
 
     menc15a_init();                     // 磁编码器初始化
 
+    Foc_Init(&Motor);                   // 初始化电机控制状态
+
+    Motor_Flash_Init();                 // 读取已保存的零点、方向和极对数
+
+    Angle_Update(&Motor);               // 初始化当前机械角度和电角度
+
     Current_Sample_Init();              // 电流采样数据初始化
 
     My_TCPWM_Init();                    // 三相互补PWM及ADC触发源初始化
@@ -67,7 +73,12 @@ int main(void)
 
     My_TCPWM_Start();                   // 启动三相PWM
     
-    pit_us_init(PIT_CH1, 50);           // 50us
+    Foc_Set_Control_Mode(
+        &Motor,
+        (Motor.ready != 0u) ?
+        MOTOR_CONTROL_ENCODER_FOC :
+        MOTOR_CONTROL_OPEN_LOOP);       // 有效校准参数上电进入编码器模式
+
     pit_ms_init(PIT_CH2, 1);            // 1ms  
     pit_ms_init(PIT_CH11,10);           // 10ms  
 
@@ -77,15 +88,16 @@ int main(void)
         // 此处编写需要循环执行的代码   
         My_Key_Service();
     
-        printf("%u,%d,%f,%u,%d,%f,%f,%u\r\n",
-               (uint32)CurrentSample.adc_raw_u,
-               (int32)CurrentSample.adc_cal_u,
-                CurrentSample.current_u,
-               (uint32)CurrentSample.adc_raw_v,
-               (int32)CurrentSample.adc_cal_v,
-                CurrentSample.current_v,
-                SVPWM.VBUS,
-                menc15a_get_absolute_data(menc15a_1_module));
+        // printf("%u,%d,%f,%u,%d,%f,%f,%u,%u\r\n",
+        //        (uint32)Current.adc_raw_u,
+        //        (int32)Current.adc_cal_u,
+        //         Current.current_u,
+        //        (uint32)Current.adc_raw_v,
+        //        (int32)Current.adc_cal_v,
+        //         Current.current_v,
+        //         SVPWM.VBUS,
+        //         Motor.mechanical_angle,
+        //         Motor.electrical_angle);
 
         // 此处编写需要循环执行的代码
     }

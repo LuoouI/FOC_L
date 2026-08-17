@@ -1,5 +1,6 @@
 #include "My_ADC.h"
 #include "Current_sample/Current_sample.h"
+#include "Motor_Control/Motor_Control.h"
 #include "Filter/Sliding_Filter.h"
 #include "adc/cy_adc.h"
 #include "trigmux/cy_trigmux.h"
@@ -247,9 +248,15 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
 
     if ((Adc1SampleDone != 0u) && (Adc2SampleDone != 0u))
     {
-        Current_Sample_Update(AdcLastRawU, AdcLastRawV);
         Adc1SampleDone = 0u;
         Adc2SampleDone = 0u;
+
+        Current_Sample_Update(AdcLastRawU, AdcLastRawV);
+        Angle_Update(&Motor);
+        Current_Sample_Transform(Motor.electrical_angle);
+        Motor.clark = Current.clark;
+        Motor.park = Current.park;
+        // Foc_Run(&Motor);
     }
 }
 

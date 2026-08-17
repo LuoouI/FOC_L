@@ -13,5 +13,7 @@
 #include "Foc_transform/Foc_transform.h"
 #include "PID/PID.h"
 #include "SVPWM/SVPWM.h"
+#include "Motor_Control/Motor_Control.h"
+#include "Motor_Flash/Motor_Flash.h"
 
 #endif // MY_HEADFILE_H
