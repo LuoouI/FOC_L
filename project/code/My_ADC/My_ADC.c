@@ -1,5 +1,6 @@
 #include "My_ADC.h"
 #include "Current_sample/Current_sample.h"
+#include "Filter/Sliding_Filter.h"
 #include "adc/cy_adc.h"
 #include "trigmux/cy_trigmux.h"
 
@@ -7,6 +8,8 @@ static volatile uint8 Adc1SampleDone = 0u;
 static volatile uint8 Adc2SampleDone = 0u;
 static uint16 AdcLastRawU;
 static uint16 AdcLastRawV;
+static Sliding_Filter_t BatteryFilter;
+static float BatteryFilterBuffer[ADC_VOLTAGE_FILTER_WINDOW_SIZE];
 
 /*===========================================================================*/
 /*  两路电流ADC硬件描述                                                       */
@@ -370,6 +373,10 @@ void My_ADC_Current_Init(void)
 void My_ADC_Voltage_Init(void)
 {
     adc_init(ADC_V_PIN, ADC_12BIT);
+    Sliding_Filter_Init(
+        &BatteryFilter,
+        BatteryFilterBuffer,
+        ADC_VOLTAGE_FILTER_WINDOW_SIZE);
 }
 
 uint16 My_ADC_GetBatteryRawValue(void)
@@ -380,10 +387,14 @@ uint16 My_ADC_GetBatteryRawValue(void)
 float My_ADC_GetBatteryVoltage(void)
 {
     uint16 BatteryRaw;
+    uint16 BatteryFilteredRaw;
     float BatteryVoltage;
 
-    BatteryRaw = adc_mean_filter_convert(ADC_V_PIN, 16u);
-    BatteryVoltage = (float)BatteryRaw * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
+    BatteryRaw = My_ADC_GetBatteryRawValue();
+    Sliding_Filter_Update(&BatteryFilter, (float)BatteryRaw);
+    BatteryFilteredRaw = Sliding_Filter_GetTrimmedUint16(&BatteryFilter);
+
+    BatteryVoltage = (float)BatteryFilteredRaw * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
     BatteryVoltage *= BATTERY_DIVIDER_RATIO * BATTERY_VOLTAGE_CALIBRATION;
 
     return BatteryVoltage;

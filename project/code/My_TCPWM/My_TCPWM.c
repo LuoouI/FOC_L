@@ -1,4 +1,5 @@
 #include "My_TCPWM.h"
+#include "Function/Function.h"
 #include "trigmux/cy_trigmux.h"
 
 /*===========================================================================*/
@@ -263,10 +264,7 @@ static void TCPWM_SinglePhase_Init(const TCPWM_PHASE_t *phase)
  ************************************************/
 static uint32 TCPWM_DutyToCompare(uint16 Duty)
 {
-    if (Duty > TCPWM_DUTY_MAX)
-    {
-        Duty = TCPWM_DUTY_MAX;
-    }
+    Duty = (uint16)Int_Limit((int32)Duty, 0, (int32)TCPWM_DUTY_MAX);
 
     return TCPWM_PERIOD -
            ((uint32)TCPWM_PERIOD * Duty / TCPWM_DUTY_MAX);

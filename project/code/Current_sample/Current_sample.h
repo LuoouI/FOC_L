@@ -8,7 +8,7 @@
 #define CURRENT_SAMPLE_ADC_MAX_VALUE         (4095.0f)    // 12位ADC最大采样值
 #define CURRENT_SAMPLE_AMPLIFIER_GAIN        (20.0f)      // 电流采样运放增益
 #define CURRENT_SAMPLE_SHUNT_RESISTANCE      (0.002f)     // 电流采样电阻，单位为欧姆
-#define CURRENT_SAMPLE_FILTER_WINDOW_SIZE    (16u)         // 电流采样滤波窗口长度
+#define CURRENT_SAMPLE_FILTER_WINDOW_SIZE    (3u)         // 电流采样滤波窗口长度
 #define CURRENT_SAMPLE_CALIBRATION_COUNT     (256u)       // 零电流状态下的偏置校准次数
 
 /*===========================================================================*/

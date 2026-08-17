@@ -1,4 +1,5 @@
 #include "Current_sample.h"
+#include "Function/Function.h"
 
 volatile motor_current_t CurrentSample = {0};
 
@@ -9,28 +10,6 @@ static float Cur_FilterBufV[CURRENT_SAMPLE_FILTER_WINDOW_SIZE];
 static uint32 Cur_CalSumU;
 static uint32 Cur_CalSumV;
 static uint16 Cur_CalCount;
-
-/***********************************************
- * @brief : 将校准后的ADC值限制到int16范围
- * @param : Value 待限制的ADC值
- * @return: 限制后的int16值
- * @date  : 2026-08-17
- * @author: LYF
- ************************************************/
-static int16 Current_Sample_LimitInt16(int32 Value)
-{
-    if (Value > 32767)
-    {
-        return 32767;
-    }
-
-    if (Value < -32768)
-    {
-        return -32768;
-    }
-
-    return (int16)Value;
-}
 
 /***********************************************
  * @brief : 将扣除零偏后的ADC值换算为电流
@@ -65,9 +44,9 @@ static void Current_Sample_UpdateCal(uint16 FilterU, uint16 FilterV)
     CalV = (int32)FilterV - (int32)CurrentSample.offset_v;
     CalW = -(CalU + CalV);
 
-    CurrentSample.adc_cal_u = Current_Sample_LimitInt16(CalU);
-    CurrentSample.adc_cal_v = Current_Sample_LimitInt16(CalV);
-    CurrentSample.adc_cal_w = Current_Sample_LimitInt16(CalW);
+    CurrentSample.adc_cal_u = (int16)Int_Limit(CalU, -32768, 32767);
+    CurrentSample.adc_cal_v = (int16)Int_Limit(CalV, -32768, 32767);
+    CurrentSample.adc_cal_w = (int16)Int_Limit(CalW, -32768, 32767);
 
     CurrentSample.current_u =
         Current_Sample_AdcToCurrent(CurrentSample.adc_cal_u);
@@ -136,6 +115,7 @@ void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV)
 
     Sliding_Filter_Update(&Cur_FilterU, (float)AdcRawU);
     Sliding_Filter_Update(&Cur_FilterV, (float)AdcRawV);
+
     /* 去掉窗口内一个最大值和一个最小值，避免单次开关尖峰进入电流值 */
     FilterU = Sliding_Filter_GetTrimmedUint16(&Cur_FilterU);
     FilterV = Sliding_Filter_GetTrimmedUint16(&Cur_FilterV);
@@ -149,12 +129,17 @@ void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV)
         if (Cur_CalCount >=
             CURRENT_SAMPLE_CALIBRATION_COUNT)
         {
-            CurrentSample.offset_u = (uint16)
-                (Cur_CalSumU /
-                 CURRENT_SAMPLE_CALIBRATION_COUNT);
-            CurrentSample.offset_v = (uint16)
-                (Cur_CalSumV /
-                 CURRENT_SAMPLE_CALIBRATION_COUNT);
+            // CurrentSample.offset_u = (uint16)
+            //     (Cur_CalSumU /
+            //      CURRENT_SAMPLE_CALIBRATION_COUNT);
+            // CurrentSample.offset_v = (uint16)
+            //     (Cur_CalSumV /
+            //      CURRENT_SAMPLE_CALIBRATION_COUNT);
+
+            /*实测值*/
+            CurrentSample.offset_u = 2049;
+            CurrentSample.offset_v = 2051;
+
             CurrentSample.calibrated = 1u;
         }
     }
