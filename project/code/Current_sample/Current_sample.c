@@ -7,9 +7,6 @@ static Sliding_Filter_t Cur_FilterU;
 static Sliding_Filter_t Cur_FilterV;
 static float Cur_FilterBufU[CURRENT_SAMPLE_FILTER_WINDOW_SIZE];
 static float Cur_FilterBufV[CURRENT_SAMPLE_FILTER_WINDOW_SIZE];
-static uint32 Cur_CalSumU;
-static uint32 Cur_CalSumV;
-static uint16 Cur_CalCount;
 
 /***********************************************
  * @brief : 将扣除零偏后的ADC值换算为电流
@@ -89,10 +86,6 @@ void Current_Sample_StartCalibration(void)
         Cur_FilterBufV,
         CURRENT_SAMPLE_FILTER_WINDOW_SIZE);
 
-    Cur_CalSumU = 0u;
-    Cur_CalSumV = 0u;
-    Cur_CalCount = 0u;
-
     Current.offset_u = 0u;
     Current.offset_v = 0u;
     Current.offset_w = 0u;
@@ -113,6 +106,10 @@ void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV)
     uint16 FilterU;
     uint16 FilterV;
 
+    // uint32 Cur_CalSumU = 0;
+    // uint32 Cur_CalSumV = 0;
+    // uint32 Cur_CalCount = 0;
+
     Current.adc_raw_u = AdcRawU;
     Current.adc_raw_v = AdcRawV;
     Current.adc_raw_w = 0u;
@@ -126,26 +123,26 @@ void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV)
 
     if (Current.calibrated == 0u)
     {
-        Cur_CalSumU += (uint32)AdcRawU;
-        Cur_CalSumV += (uint32)AdcRawV;
-        Cur_CalCount++;
+        // Cur_CalSumU += (uint32)AdcRawU;
+        // Cur_CalSumV += (uint32)AdcRawV;
+        // Cur_CalCount++;
 
-        if (Cur_CalCount >=
-            CURRENT_SAMPLE_CALIBRATION_COUNT)
-        {
+        // if (Cur_CalCount >=
+        //     CURRENT_SAMPLE_CALIBRATION_COUNT)
+        // {
             // Current.offset_u = (uint16)
             //     (Cur_CalSumU /       
             //      CURRENT_SAMPLE_CALIBRATION_COUNT);
             // Current.offset_v = (uint16)
             //     (Cur_CalSumV /
             //      CURRENT_SAMPLE_CALIBRATION_COUNT);
+            // }
 
-            /*实测值*/
-            Current.offset_u = 2049;
-            Current.offset_v = 2051;
-
-            Current.calibrated = 1u;
-        }
+        /*实测值*/
+        Current.offset_u = 2049;
+        Current.offset_v = 2051;
+        Current.calibrated = 1u;
+        
     }
 
     if (Current.calibrated != 0u)

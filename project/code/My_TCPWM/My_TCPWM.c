@@ -19,15 +19,15 @@ static const TCPWM_3PHASE_t TCPWM_3PHASE =
 };
 
 /***********************************************
- * @brief : 初始化ADC专用CC1采样事件计数器
+ * @brief : 初始化PWM占空比同步及ADC采样主计数器
  * @param : /
  * @return: void
- * @date  : 2026-08-16
+ * @date  : 2026-08-18
  * @author: LYF
  ************************************************/
-static void TCPWM_ADC_Trigger_Init(void)
+static void TCPWM_Master_Trigger_Init(void)
 {
-    cy_stc_tcpwm_pwm_config_t AdcTriggerConfig;
+    cy_stc_tcpwm_pwm_config_t MasterTriggerConfig;
 
     Cy_SysClk_PeriphAssignDivider(
         PCLK_TCPWM0_CLOCKS256,
@@ -43,35 +43,35 @@ static void TCPWM_ADC_Trigger_Init(void)
         CY_SYSCLK_DIV_16_BIT,
         2u);
 
-    memset(&AdcTriggerConfig, 0, sizeof(AdcTriggerConfig));
+    memset(&MasterTriggerConfig, 0, sizeof(MasterTriggerConfig));
     Cy_Tcpwm_Pwm_DeInit(TCPWM0_GRP1_CNT0);
 
-    AdcTriggerConfig.pwmMode            = CY_TCPWM_PWM_MODE_DEADTIME;
-    AdcTriggerConfig.clockPrescaler     = CY_TCPWM_PRESCALER_DIVBY_1;
-    AdcTriggerConfig.debug_pause        = false;
-    AdcTriggerConfig.deadTime           = 0u;
-    AdcTriggerConfig.runMode            = CY_TCPWM_PWM_CONTINUOUS;
-    AdcTriggerConfig.countDirection     = CY_TCPWM_COUNTER_COUNT_UP_DOWN1;
-    AdcTriggerConfig.cc0MatchMode       = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
-    AdcTriggerConfig.overflowMode       = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
-    AdcTriggerConfig.underflowMode      = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
-    AdcTriggerConfig.cc1MatchMode       = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
-    AdcTriggerConfig.period             = TCPWM_PERIOD;
-    AdcTriggerConfig.compare0           = TCPWM_PERIOD / 2u;
-    AdcTriggerConfig.compare1           = TCPWM_ADC_SAMPLE_COUNT;
-    AdcTriggerConfig.compare1_buff      = TCPWM_ADC_SAMPLE_COUNT;
-    AdcTriggerConfig.interruptSources   = CY_TCPWM_INT_NONE;
-    AdcTriggerConfig.killMode           = CY_TCPWM_PWM_NOT_STOP_ON_KILL;
+    MasterTriggerConfig.pwmMode            = CY_TCPWM_PWM_MODE_DEADTIME;
+    MasterTriggerConfig.clockPrescaler     = CY_TCPWM_PRESCALER_DIVBY_1;
+    MasterTriggerConfig.debug_pause        = false;
+    MasterTriggerConfig.deadTime           = 0u;
+    MasterTriggerConfig.runMode            = CY_TCPWM_PWM_CONTINUOUS;
+    MasterTriggerConfig.countDirection     = CY_TCPWM_COUNTER_COUNT_UP_DOWN1;
+    MasterTriggerConfig.cc0MatchMode       = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
+    MasterTriggerConfig.overflowMode       = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
+    MasterTriggerConfig.underflowMode      = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
+    MasterTriggerConfig.cc1MatchMode       = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
+    MasterTriggerConfig.period             = TCPWM_PERIOD;
+    MasterTriggerConfig.compare0           = TCPWM_PERIOD / 2u;
+    MasterTriggerConfig.compare1           = TCPWM_ADC_SAMPLE_COUNT;
+    MasterTriggerConfig.compare1_buff      = TCPWM_ADC_SAMPLE_COUNT;
+    MasterTriggerConfig.interruptSources   = CY_TCPWM_INT_NONE;
+    MasterTriggerConfig.killMode           = CY_TCPWM_PWM_NOT_STOP_ON_KILL;
     /* 公共tr_all_cnt_in[0]对应TCPWM的TRIG3输入。 */
-    AdcTriggerConfig.startInputMode     = CY_TCPWM_INPUT_RISING_EDGE;
-    AdcTriggerConfig.startInput         = CY_TCPWM_INPUT_TRIG3;
-    AdcTriggerConfig.countInputMode     = CY_TCPWM_INPUT_LEVEL;
-    AdcTriggerConfig.countInput         = CY_TCPWM_INPUT1;
-    AdcTriggerConfig.pwmOnDisable       = CY_TCPWM_PWM_OUT_MODE_LOW;
-    AdcTriggerConfig.trigger0EventCfg   = CY_TCPWM_COUNTER_DISABLED;
-    AdcTriggerConfig.trigger1EventCfg   = CY_TCPWM_COUNTER_CC1_MATCH;
+    MasterTriggerConfig.startInputMode     = CY_TCPWM_INPUT_RISING_EDGE;
+    MasterTriggerConfig.startInput         = CY_TCPWM_INPUT_TRIG3;
+    MasterTriggerConfig.countInputMode     = CY_TCPWM_INPUT_LEVEL;
+    MasterTriggerConfig.countInput         = CY_TCPWM_INPUT1;
+    MasterTriggerConfig.pwmOnDisable       = CY_TCPWM_PWM_OUT_MODE_LOW;
+    MasterTriggerConfig.trigger0EventCfg   = CY_TCPWM_COUNTER_TERMINAL_COUNT;
+    MasterTriggerConfig.trigger1EventCfg   = CY_TCPWM_COUNTER_CC1_MATCH;
 
-    Cy_Tcpwm_Pwm_Init(TCPWM0_GRP1_CNT0, &AdcTriggerConfig);
+    Cy_Tcpwm_Pwm_Init(TCPWM0_GRP1_CNT0, &MasterTriggerConfig);
 
     /* SDK初始化函数的计数初值判断有误，中心对齐模式明确从1开始计数 */
     TCPWM0_GRP1_CNT0->unCOUNTER.u32Register = CY_TCPWM_CNT_UP_DOWN_INIT_VAL;
@@ -82,6 +82,23 @@ static void TCPWM_ADC_Trigger_Init(void)
     TCPWM0_GRP1_CNT0->unCTRL.stcField.u1CC1_MATCH_DOWN_EN  = 0u;
 
     Cy_Tcpwm_Pwm_Enable(TCPWM0_GRP1_CNT0);
+}
+
+/***********************************************
+ * @brief : 初始化三相PWM占空比硬件同步触发链路
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-18
+ * @author: LYF
+ ************************************************/
+static void TCPWM_Duty_Sync_Init(void)
+{
+    (void)Cy_TrigMux_Connect(
+        TRIG_IN_MUX_4_TCPWM_16M_TR_OUT00,
+        TRIG_OUT_MUX_4_TCPWM_ALL_CNT_TR_IN1,
+        CY_TR_MUX_TR_INV_DISABLE,
+        TRIGGER_TYPE_EDGE,
+        0u);
 }
 
 /***********************************************
@@ -158,9 +175,9 @@ static void TCPWM_Phase_Init(const TCPWM_PHASE_t *phase)
     TCPWM_config.compare0_buff      = TCPWM_PERIOD / 2u;
     TCPWM_config.enableCompare0Swap = true;
     TCPWM_config.killMode           = CY_TCPWM_PWM_NOT_STOP_ON_KILL;
-    /* 比较值和周期不依赖外部触发输入，启动后连续运行 */
-    TCPWM_config.switchInputMode    = CY_TCPWM_INPUT_LEVEL;
-    TCPWM_config.switchInput        = CY_TCPWM_INPUT0;
+    /* 公共tr_all_cnt_in[1]对应TCPWM的TRIG4输入，用于三相同步交换CC0。 */
+    TCPWM_config.switchInputMode    = CY_TCPWM_INPUT_RISING_EDGE;
+    TCPWM_config.switchInput        = CY_TCPWM_INPUT_TRIG4;
     TCPWM_config.reloadInputMode    = CY_TCPWM_INPUT_LEVEL;
     TCPWM_config.reloadInput        = CY_TCPWM_INPUT0;
     TCPWM_config.countInputMode     = CY_TCPWM_INPUT_LEVEL;
@@ -222,7 +239,8 @@ void My_TCPWM_Init(void)
     TCPWM_SinglePhase_Init(&TCPWM_3PHASE.a);
     TCPWM_SinglePhase_Init(&TCPWM_3PHASE.b);
     TCPWM_SinglePhase_Init(&TCPWM_3PHASE.c);
-    TCPWM_ADC_Trigger_Init();
+    TCPWM_Master_Trigger_Init();
+    TCPWM_Duty_Sync_Init();
 }
 
 void My_TCPWM_Start(void)
@@ -246,9 +264,4 @@ void My_TCPWM_SetDuty(uint16 DutyA, uint16 DutyB, uint16 DutyC)
     Cy_Tcpwm_Pwm_SetCompare0_Buff(
         TCPWM_3PHASE.c.timer,
         TCPWM_DutyToCompare(DutyC));
-
-    /* 写入缓冲比较值后触发Capture0，使三相PWM立即装载新占空比。 */             /*软件同步 硬件同步配懵逼了 相位差18ns*/
-    Cy_Tcpwm_TriggerCapture0(TCPWM_3PHASE.a.timer);
-    Cy_Tcpwm_TriggerCapture0(TCPWM_3PHASE.b.timer);
-    Cy_Tcpwm_TriggerCapture0(TCPWM_3PHASE.c.timer);
 }

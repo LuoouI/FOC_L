@@ -55,12 +55,6 @@ int main(void)
 
     menc15a_init();                     // 磁编码器初始化
 
-    Foc_Init(&Motor);                   // 初始化电机控制状态
-
-    Motor_Flash_Init();                 // 读取已保存的零点、方向和极对数
-
-    Angle_Update(&Motor);               // 初始化当前机械角度和电角度
-
     Current_Sample_Init();              // 电流采样数据初始化
 
     My_TCPWM_Init();                    // 三相互补PWM及ADC触发源初始化
@@ -72,9 +66,6 @@ int main(void)
     My_ADC_Voltage_Init();              // 电压采样初始化 
 
     My_TCPWM_Start();                   // 启动三相PWM
-    
-    /* 使用磁编码器角度进行FOC换相，参数无效时控制函数保持停机。 */
-    Foc_Set_Control_Mode(&Motor, MOTOR_CONTROL_ENCODER_FOC);
 
     pit_ms_init(PIT_CH2, 1);            // 1ms  
     pit_ms_init(PIT_CH11,10);           // 10ms  
@@ -85,7 +76,6 @@ int main(void)
         // 此处编写需要循环执行的代码   
         My_Key_Service();
    
-        printf("%f,%f\r\n",Motor.park.Id,Motor.park.Iq);
         // 此处编写需要循环执行的代码
     }
 }

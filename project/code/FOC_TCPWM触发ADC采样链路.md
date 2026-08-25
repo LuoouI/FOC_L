@@ -141,7 +141,7 @@ Pwm_config.cc0MatchMode     = CY_TCPWM_PWM_TR_CTRL2_INVERT;
 Pwm_config.cc1MatchMode     = CY_TCPWM_PWM_TR_CTRL2_NO_CHANGE;
 Pwm_config.overflowMode     = CY_TCPWM_PWM_TR_CTRL2_SET;
 Pwm_config.underflowMode    = CY_TCPWM_PWM_TR_CTRL2_CLEAR;
-Pwm_config.trigger0EventCfg = CY_TCPWM_COUNTER_DISABLED;
+Pwm_config.trigger0EventCfg = CY_TCPWM_COUNTER_TERMINAL_COUNT;
 Pwm_config.trigger1EventCfg = CY_TCPWM_COUNTER_CC1_MATCH;
 
 Cy_Tcpwm_Pwm_Init(TCPWM0_GRP1_CNT0, &Pwm_config);
@@ -188,7 +188,24 @@ Trigger_status = Cy_TrigMux_Connect(
 
 初始化代码必须检查 `Trigger_status == CY_TRIGMUX_SUCCESS`，不能忽略连接失败。
 
-### 4.4 让三个 SAR 的 GENERIC0 都选择通用触发线 0
+### 4.4 三相占空比硬件同步
+
+主计数器的 `tr_out0[256]` 输出 TC 事件，通过 TriggerMux 接到 TCPWM 公共输入 1：
+
+```c
+(void)Cy_TrigMux_Connect(
+    TRIG_IN_MUX_4_TCPWM_16M_TR_OUT00,
+    TRIG_OUT_MUX_4_TCPWM_ALL_CNT_TR_IN1,
+    CY_TR_MUX_TR_INV_DISABLE,
+    TRIGGER_TYPE_EDGE,
+    0u);
+```
+
+公共输入 1 对应各 TCPWM 计数器的 `TRIG4`。三相 PWM 将 Compare0 Swap 输入配置为 `TRIG4` 上升沿后，`My_TCPWM_SetDuty()` 只需写入三相 `CC0_BUFF`，主计数器每次产生 TC 事件时便会由硬件同步交换三相 `CC0` 与 `CC0_BUFF`。
+
+该机制是交换而不是单向装载。控制环必须在每个 PWM 周期都写入三相占空比，即使占空比未变化也不能跳过；否则新旧比较值可能在后续周期交替生效。
+
+### 4.5 让三个 SAR 的 GENERIC0 都选择通用触发线 0
 
 ```c
 Cy_Adc_SetGenericTriggerInput(PASS0_EPASS_MMIO, 0u, 0u, 0u);
@@ -210,7 +227,7 @@ PASS 实例、SAR 编号、SAR 内部 GENERIC 编号、PASS 通用触发线编�
 
 因此一次主 PWM 触发可以让三个 SAR 同时开始各自的转换。
 
-### 4.5 ADC 通道配置
+### 4.6 ADC 通道配置
 
 ADC 通道初始化时把触发源改成 `CY_ADC_TRIGGER_GENERIC0`：
 

@@ -5,10 +5,6 @@
 #include "adc/cy_adc.h"
 #include "trigmux/cy_trigmux.h"
 
-static volatile uint8 Adc1SampleDone = 0u;
-static volatile uint8 Adc2SampleDone = 0u;
-static uint16 AdcLastRawU;
-static uint16 AdcLastRawV;
 static Sliding_Filter_t BatteryFilter;
 static float BatteryFilterBuffer[ADC_VOLTAGE_FILTER_WINDOW_SIZE];
 
@@ -199,6 +195,10 @@ static bool My_ADC_IsBothGroupDone(uint32 ChannelIndex)
  ************************************************/
 static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
 {
+    static volatile uint8 Adc1SampleDone = 0u;
+    static volatile uint8 Adc2SampleDone = 0u;
+    static uint16 AdcLastRawU = 0u;
+    static uint16 AdcLastRawV = 0u;
     cy_stc_adc_interrupt_source_t InterruptStatus = {0};
     bool IsFirstInterrupt;
     bool BothGroupDoneAtEntry = false;
@@ -252,11 +252,7 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
         Adc2SampleDone = 0u;
 
         Current_Sample_Update(AdcLastRawU, AdcLastRawV);
-        Angle_Update(&Motor);
-        Current_Sample_Transform(Motor.electrical_angle);
-        Motor.clark = Current.clark;
-        Motor.park = Current.park;
-        Foc_Run(&Motor);
+
     }
 }
 
@@ -357,11 +353,6 @@ void My_ADC_Current_Init(void)
 
     gpio_init(ADC_FIRST_ISR_DEBUG_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
     gpio_init(ADC_BOTH_DONE_DEBUG_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
-
-    Adc1SampleDone = 0u;
-    Adc2SampleDone = 0u;
-    AdcLastRawU = 0u;
-    AdcLastRawV = 0u;
 
     My_ADC_Sar_Init(PASS0_SAR0, PCLK_PASS0_CLOCK_SAR0);
     My_ADC_Sar_Init(PASS0_SAR2, PCLK_PASS0_CLOCK_SAR2);

@@ -54,7 +54,7 @@ void My_TCPWM_Init(void);
 void My_TCPWM_Start(void);
 
 /***********************************************
- * @brief : 设置三相PWM占空比
+ * @brief : 写入三相PWM占空比缓冲值，在主计数器TC事件时同步生效
  * @param : DutyA A相占空比，范围0~10000
  * @param : DutyB B相占空比，范围0~10000
  * @param : DutyC C相占空比，范围0~10000
