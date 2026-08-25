@@ -247,7 +247,7 @@ void My_TCPWM_SetDuty(uint16 DutyA, uint16 DutyB, uint16 DutyC)
         TCPWM_3PHASE.c.timer,
         TCPWM_DutyToCompare(DutyC));
 
-    /* 写入缓冲比较值后触发Capture0，使三相PWM立即装载新占空比。 */
+    /* 写入缓冲比较值后触发Capture0，使三相PWM立即装载新占空比。 */             /*软件同步 硬件同步配懵逼了 相位差18ns*/
     Cy_Tcpwm_TriggerCapture0(TCPWM_3PHASE.a.timer);
     Cy_Tcpwm_TriggerCapture0(TCPWM_3PHASE.b.timer);
     Cy_Tcpwm_TriggerCapture0(TCPWM_3PHASE.c.timer);

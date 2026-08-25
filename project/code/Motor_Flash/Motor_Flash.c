@@ -30,8 +30,7 @@ void Motor_Flash_Read(void)
     PolePairsValue = flash_union_buffer[2u].uint32_type;
     if ((ZeroOffset >= ANGLE_PERIOD) ||
         ((DirectionValue != 1) && (DirectionValue != -1)) ||
-        (PolePairsValue == 0u) ||
-        (PolePairsValue > MOTOR_ZERO_CALIBRATION_MAX_POLE_PAIRS))
+        (PolePairsValue == 0u))
     {
         return;
     }
@@ -55,8 +54,7 @@ uint8 Motor_Flash_Write(void)
 
     if (((uint32)ZeroOffset >= ANGLE_PERIOD) ||
         ((Direction != 1) && (Direction != -1)) ||
-        (PolePairs == 0u) ||
-        (PolePairs > MOTOR_ZERO_CALIBRATION_MAX_POLE_PAIRS))
+        (PolePairs == 0u))
     {
         return 1u;
     }

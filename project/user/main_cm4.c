@@ -73,11 +73,8 @@ int main(void)
 
     My_TCPWM_Start();                   // 启动三相PWM
     
-    Foc_Set_Control_Mode(
-        &Motor,
-        (Motor.ready != 0u) ?
-        MOTOR_CONTROL_ENCODER_FOC :
-        MOTOR_CONTROL_OPEN_LOOP);       // 有效校准参数上电进入编码器模式
+    /* 使用磁编码器角度进行FOC换相，参数无效时控制函数保持停机。 */
+    Foc_Set_Control_Mode(&Motor, MOTOR_CONTROL_ENCODER_FOC);
 
     pit_ms_init(PIT_CH2, 1);            // 1ms  
     pit_ms_init(PIT_CH11,10);           // 10ms  
@@ -87,18 +84,8 @@ int main(void)
     {
         // 此处编写需要循环执行的代码   
         My_Key_Service();
-    
-        // printf("%u,%d,%f,%u,%d,%f,%f,%u,%u\r\n",
-        //        (uint32)Current.adc_raw_u,
-        //        (int32)Current.adc_cal_u,
-        //         Current.current_u,
-        //        (uint32)Current.adc_raw_v,
-        //        (int32)Current.adc_cal_v,
-        //         Current.current_v,
-        //         SVPWM.VBUS,
-        //         Motor.mechanical_angle,
-        //         Motor.electrical_angle);
-
+   
+        printf("%f,%f\r\n",Motor.park.Id,Motor.park.Iq);
         // 此处编写需要循环执行的代码
     }
 }

@@ -15,9 +15,11 @@ Foc_motor_t Motor = {
     .clark = {0.0f, 0.0f},
     .park = {0.0f, 0.0f},
     .motor_duty = 0,
+    .duty_output = 0.0f,
+    .duty_ramp_step = MOTOR_DUTY_RAMP_DEFAULT_STEP,
     .ud = 0.0f,
     .uq = 2.0f,
-    .control_mode = MOTOR_CONTROL_OPEN_LOOP,
+    .control_mode = MOTOR_CONTROL_ENCODER_FOC,
     .open_loop_angle = 0u,
     .open_loop_step = MOTOR_OPEN_LOOP_DEFAULT_STEP,
     .open_loop_hold_count = 0u,
@@ -25,7 +27,56 @@ Foc_motor_t Motor = {
     .ready = 0u
 };
 
+const Motor_ZeroCalib_t Motor_zeroCalib =
+{
+    .Voltage      = 1.0f,
+    .Hold_ms      = 200u,
+    .Step_count   = 100u,
+    .Step_ms      = 8u,
+    .Sample_count = 16u,
+    .Sample_ms    = 2u,
+    .Min_travel   = 400
+};
+
 static volatile uint8 MotorCalibrating = 0u;
+
+/***********************************************
+ * @brief : 按设定步长更新电机实际输出幅值
+ * @param : Output_duty 当前实际输出幅值
+ * @param : Target_duty 目标输出幅值
+ * @param : Ramp_step 单控制周期变化量
+ * @return: 更新后的实际输出幅值
+ * @date  : 2026-08-18
+ * @author: LYF
+ ************************************************/
+static float Motor_Duty_Ramp(float Output_duty,
+                             float Target_duty,
+                             float Ramp_step)
+{
+    if (Ramp_step <= 0.0f)
+    {
+        return Target_duty;
+    }
+
+    if (Output_duty < Target_duty)
+    {
+        Output_duty += Ramp_step;
+        if (Output_duty > Target_duty)
+        {
+            Output_duty = Target_duty;
+        }
+    }
+    else if (Output_duty > Target_duty)
+    {
+        Output_duty -= Ramp_step;
+        if (Output_duty < Target_duty)
+        {
+            Output_duty = Target_duty;
+        }
+    }
+
+    return Output_duty;
+}
 
 /***********************************************
  * @brief : 按指定电压矢量输出三相PWM
@@ -158,6 +209,11 @@ void Foc_Init(Foc_motor_t *motor)
         motor->open_loop_step = MOTOR_OPEN_LOOP_DEFAULT_STEP;
     }
 
+    if (motor->duty_ramp_step <= 0.0f)
+    {
+        motor->duty_ramp_step = MOTOR_DUTY_RAMP_DEFAULT_STEP;
+    }
+
     if ((motor->control_mode != MOTOR_CONTROL_OPEN_LOOP) &&
         (motor->control_mode != MOTOR_CONTROL_ENCODER_FOC))
     {
@@ -165,12 +221,13 @@ void Foc_Init(Foc_motor_t *motor)
     }
 
     motor->motor_duty = 0;
+    motor->duty_output = 0.0f;
     motor->open_loop_angle = 0u;
     motor->open_loop_hold_count = 0u;
     motor->open_loop_started = 0u;
 }
 
-void Foc_Stop(Foc_motor_t *motor)
+void Motor_Stop(Foc_motor_t *motor)
 {
     if (motor == NULL)
     {
@@ -178,6 +235,7 @@ void Foc_Stop(Foc_motor_t *motor)
     }
 
     motor->motor_duty = 0;
+    motor->duty_output = 0.0f;
     motor->open_loop_hold_count = 0u;
     motor->open_loop_started = 0u;
     My_TCPWM_SetDuty(
@@ -199,15 +257,16 @@ void Foc_Set_Control_Mode(Foc_motor_t *motor, Motor_control_mode_t mode)
         return;
     }
 
-    Foc_Stop(motor);
+    Motor_Stop(motor);
     motor->control_mode = mode;
     motor->open_loop_angle = 0u;
 }
 
 void Foc_Run(Foc_motor_t *motor)
 {
-    int32 Duty;
-    int32 DutyAbs;
+    int32 TargetDuty;
+    float Duty;
+    float DutyAbs;
     float DutyScale;
     float Ud;
     float Uq;
@@ -225,21 +284,27 @@ void Foc_Run(Foc_motor_t *motor)
     if ((motor->control_mode == MOTOR_CONTROL_ENCODER_FOC) &&
         (motor->ready == 0u))
     {
-        Foc_Set_Control_Mode(motor, MOTOR_CONTROL_OPEN_LOOP);
+        Motor_Stop(motor);
         return;
     }
 
-    Duty = Int_Limit(
+    TargetDuty = Int_Limit(
         (int32)motor->motor_duty,
         -(int32)TCPWM_DUTY_MAX,
         (int32)TCPWM_DUTY_MAX);
-    motor->motor_duty = (int16)Duty;
+    motor->motor_duty = (int16)TargetDuty;
 
-    if (Duty == 0)
+    if (TargetDuty == 0)
     {
-        Foc_Stop(motor);
+        Motor_Stop(motor);
         return;
     }
+
+    Duty = Motor_Duty_Ramp(
+        motor->duty_output,
+        (float)TargetDuty,
+        motor->duty_ramp_step);
+    motor->duty_output = Duty;
 
     DutyAbs = (Duty >= 0) ? Duty : -Duty;
     DutyScale = (float)DutyAbs / (float)TCPWM_DUTY_MAX;
@@ -317,7 +382,7 @@ uint8 Motor_Zero_Calibration(Foc_motor_t *motor)
         return 1u;
     }
 
-    if (MOTOR_ZERO_CALIBRATION_VOLTAGE <= 0.0f)
+    if (Motor_zeroCalib.Voltage <= 0.0f)
     {
         printf("零点校准失败：校准电压必须大于0\r\n");
         return 1u;
@@ -328,9 +393,9 @@ uint8 Motor_Zero_Calibration(Foc_motor_t *motor)
     VBUS_Get();
     interrupt_global_enable(InterruptState);
     if ((SVPWM.VBUS <= 0.0f) ||
-        (SVPWM.DQ_Limit < MOTOR_ZERO_CALIBRATION_VOLTAGE))
+        (SVPWM.DQ_Limit < Motor_zeroCalib.Voltage))
     {
-        Foc_Stop(motor);
+        Motor_Stop(motor);
         printf("零点校准失败：母线电压=%.2fV，允许矢量电压=%.2fV\r\n",
                SVPWM.VBUS,
                SVPWM.DQ_Limit);
@@ -338,7 +403,7 @@ uint8 Motor_Zero_Calibration(Foc_motor_t *motor)
     }
 
     foc_voltage_calc_duty(
-        MOTOR_ZERO_CALIBRATION_VOLTAGE,
+        Motor_zeroCalib.Voltage,
         0.0f,
         0u,
         &CalibrationDutyA,
@@ -346,7 +411,7 @@ uint8 Motor_Zero_Calibration(Foc_motor_t *motor)
         &CalibrationDutyC);
     printf("零点校准输出：母线=%.2fV，矢量=%.2fV，占空比=%u,%u,%u\r\n",
            SVPWM.VBUS,
-           MOTOR_ZERO_CALIBRATION_VOLTAGE,
+           Motor_zeroCalib.Voltage,
            (uint32)CalibrationDutyA,
            (uint32)CalibrationDutyB,
            (uint32)CalibrationDutyC);
@@ -368,15 +433,15 @@ uint8 Motor_Zero_Calibration(Foc_motor_t *motor)
     MotorCalibrating = 1u;
 
     /* 校准标志已屏蔽异步FOC，保持中断以持续更新母线电压。 */
-    Foc_Stop(motor);
+    Motor_Stop(motor);
 
     /* 使用已验证工程的定向电压和保持时间，使转子先稳定吸合。 */
     Foc_OutputVoltage(
         motor,
-        MOTOR_ZERO_CALIBRATION_VOLTAGE,
+        Motor_zeroCalib.Voltage,
         0.0f,
         0u);
-    system_delay_ms(MOTOR_ZERO_CALIBRATION_HOLD_MS);
+    system_delay_ms(Motor_zeroCalib.Hold_ms);
     printf("零点校准定向：编码器=%u，电流校准=%u，相电流=%.2f,%.2f,%.2fA\r\n",
            (uint32)menc15a_get_absolute_data(motor->sensor_id),
            (uint32)Current.calibrated,
@@ -388,35 +453,35 @@ uint8 Motor_Zero_Calibration(Foc_motor_t *motor)
     StartContinuousAngle = Motor_Read_Average_Angle(
         motor,
         &EncoderUnwrap,
-        MOTOR_ZERO_CALIBRATION_SAMPLE_COUNT,
-        MOTOR_ZERO_CALIBRATION_SAMPLE_MS);
+        Motor_zeroCalib.Sample_count,
+        Motor_zeroCalib.Sample_ms);
     StartMechanicalAngle = Angle_Wrap(StartContinuousAngle);
 
     for (Step = 0u;
-         Step <= MOTOR_ZERO_CALIBRATION_STEP_COUNT;
+         Step <= Motor_zeroCalib.Step_count;
          Step++)
     {
         ElectricalAngle = (uint16)(
             (uint32)ANGLE_MAX * Step /
-            MOTOR_ZERO_CALIBRATION_STEP_COUNT);
+            Motor_zeroCalib.Step_count);
         Foc_OutputVoltage(
             motor,
-            MOTOR_ZERO_CALIBRATION_VOLTAGE,
+            Motor_zeroCalib.Voltage,
             0.0f,
             ElectricalAngle);
-        system_delay_ms(MOTOR_ZERO_CALIBRATION_STEP_MS);
+        system_delay_ms(Motor_zeroCalib.Step_ms);
 
         SampleMechanicalAngle =
             menc15a_get_absolute_data(motor->sensor_id);
         (void)Angle_Unwrap(&EncoderUnwrap, SampleMechanicalAngle);
 
-        if ((Step == (MOTOR_ZERO_CALIBRATION_STEP_COUNT / 4u)) ||
-            (Step == (MOTOR_ZERO_CALIBRATION_STEP_COUNT / 2u)) ||
-            (Step == (MOTOR_ZERO_CALIBRATION_STEP_COUNT * 3u / 4u)) ||
-            (Step == MOTOR_ZERO_CALIBRATION_STEP_COUNT))
+        if ((Step == (Motor_zeroCalib.Step_count / 4u)) ||
+            (Step == (Motor_zeroCalib.Step_count / 2u)) ||
+            (Step == (Motor_zeroCalib.Step_count * 3u / 4u)) ||
+            (Step == Motor_zeroCalib.Step_count))
         {
             foc_voltage_calc_duty(
-                MOTOR_ZERO_CALIBRATION_VOLTAGE,
+                Motor_zeroCalib.Voltage,
                 0.0f,
                 ElectricalAngle,
                 &CalibrationDutyA,
@@ -437,28 +502,31 @@ uint8 Motor_Zero_Calibration(Foc_motor_t *motor)
     StopContinuousAngle = Motor_Read_Average_Angle(
         motor,
         &EncoderUnwrap,
-        MOTOR_ZERO_CALIBRATION_SAMPLE_COUNT,
-        MOTOR_ZERO_CALIBRATION_SAMPLE_MS);
+        Motor_zeroCalib.Sample_count,
+        Motor_zeroCalib.Sample_ms);
     StopMechanicalAngle = Angle_Wrap(StopContinuousAngle);
     EncoderTravel = StopContinuousAngle - StartContinuousAngle;
     EncoderTravelAbs = (EncoderTravel >= 0) ?
                        EncoderTravel : -EncoderTravel;
 
-    Foc_Stop(motor);
+    Motor_Stop(motor);
 
-    if (EncoderTravelAbs >= MOTOR_ZERO_CALIBRATION_MIN_TRAVEL)
+    if (EncoderTravelAbs >= Motor_zeroCalib.Min_travel)
     {
         PolePairs = (uint16)(
             ((uint32)ANGLE_PERIOD + (uint32)(EncoderTravelAbs / 2)) /
             (uint32)EncoderTravelAbs);
 
-        if ((PolePairs > 0u) &&
-            (PolePairs <= MOTOR_ZERO_CALIBRATION_MAX_POLE_PAIRS))
+        if (PolePairs > 0u)
         {
             motor->direction = (EncoderTravel >= 0) ? 1 : -1;
             motor->pole_pairs = (uint8)PolePairs;
             motor->zero_offset = StopMechanicalAngle;
+            /* 校准成功后使用磁编码器角度进行FOC换相。 */
             motor->control_mode = MOTOR_CONTROL_ENCODER_FOC;
+            motor->open_loop_angle = 0u;
+            motor->open_loop_hold_count = 0u;
+            motor->open_loop_started = 0u;
             CalibrationResult = 0u;
         }
     }

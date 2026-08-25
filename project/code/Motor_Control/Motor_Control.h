@@ -5,18 +5,26 @@
 #include "Foc_transform/Foc_transform.h"
 
 #define MOTOR_CONTROL_PERIOD_US               (50u)   // 电机控制周期
-#define MOTOR_OPEN_LOOP_DEFAULT_STEP          (3u)    // 单周期默认电角度增量
+#define MOTOR_OPEN_LOOP_DEFAULT_STEP          (60u)   // 单周期默认电角度增量，约314转/分钟（7对极、50us周期）
 #define MOTOR_OPEN_LOOP_ALIGN_MS              (200u)  // 开环启动定向时间
 #define MOTOR_OPEN_LOOP_ALIGN_COUNT           ((MOTOR_OPEN_LOOP_ALIGN_MS * 1000u) / MOTOR_CONTROL_PERIOD_US)
+#define MOTOR_DUTY_RAMP_DEFAULT_STEP          (0.05f) // 单控制周期默认占空比斜坡增量
 
-#define MOTOR_ZERO_CALIBRATION_VOLTAGE        (1.5f)  // 零点校准d轴电压
-#define MOTOR_ZERO_CALIBRATION_HOLD_MS        (200u)  // 校准起始定位保持时间
-#define MOTOR_ZERO_CALIBRATION_STEP_COUNT     (100u)  // 零点牵引步数
-#define MOTOR_ZERO_CALIBRATION_STEP_MS        (8u)    // 零点牵引步间隔
-#define MOTOR_ZERO_CALIBRATION_SAMPLE_COUNT   (16u)   // 零点位置平均采样次数
-#define MOTOR_ZERO_CALIBRATION_SAMPLE_MS      (2u)    // 零点位置采样间隔
-#define MOTOR_ZERO_CALIBRATION_MIN_TRAVEL     (400)   // 判定编码器有效的最小累计行程
-#define MOTOR_ZERO_CALIBRATION_MAX_POLE_PAIRS (64u)  // 校准允许的最大极对数
+/*===========================================================================*/
+/*  电机零点校准参数                                                          */
+/*===========================================================================*/
+typedef struct
+{
+    float  Voltage;                      // 零点校准d轴电压
+    uint16 Hold_ms;                      // 校准起始定位保持时间
+    uint16 Step_count;                   // 零点牵引步数
+    uint16 Step_ms;                      // 零点牵引步间隔
+    uint16 Sample_count;                 // 零点位置平均采样次数
+    uint16 Sample_ms;                    // 零点位置采样间隔
+    int32  Min_travel;                   // 判定编码器有效的最小累计行程
+} Motor_ZeroCalib_t;
+
+extern const Motor_ZeroCalib_t Motor_zeroCalib;
 
 /*===========================================================================*/
 /*  电机控制模式                                                              */
@@ -24,7 +32,7 @@
 typedef enum
 {
     MOTOR_CONTROL_OPEN_LOOP = 0,                // 开环电压矢量控制
-    MOTOR_CONTROL_ENCODER_FOC                    // 磁编码器电压矢量控制
+    MOTOR_CONTROL_ENCODER_FOC                   // 磁编码器电压矢量控制
 } Motor_control_mode_t;
 
 /*===========================================================================*/
@@ -46,6 +54,8 @@ typedef struct Foc_motor_init_target
     // Foc_PositionLoop_t position_loop;        // 位置环对象
 
     int16  motor_duty;                          // 输出幅值指令，范围-10000~10000
+    float  duty_output;                         // 斜坡处理后的实际输出幅值
+    float  duty_ramp_step;                      // 单控制周期输出幅值变化量
     float  ud;                                  // d轴最大电压，单位为V
     float  uq;                                  // q轴最大电压，单位为V
     Motor_control_mode_t control_mode;          // 当前电机控制模式
@@ -96,7 +106,7 @@ void Foc_Init(Foc_motor_t *motor);
  * @date  : 2026-08-17
  * @author: LYF
  ************************************************/
-void Foc_Stop(Foc_motor_t *motor);
+void Motor_Stop(Foc_motor_t *motor);
 
 /***********************************************
  * @brief : 设置电机控制模式并停止当前输出

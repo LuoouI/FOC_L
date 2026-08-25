@@ -256,7 +256,7 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
         Current_Sample_Transform(Motor.electrical_angle);
         Motor.clark = Current.clark;
         Motor.park = Current.park;
-        // Foc_Run(&Motor);
+        Foc_Run(&Motor);
     }
 }
 

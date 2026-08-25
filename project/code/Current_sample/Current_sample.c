@@ -134,7 +134,7 @@ void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV)
             CURRENT_SAMPLE_CALIBRATION_COUNT)
         {
             // Current.offset_u = (uint16)
-            //     (Cur_CalSumU /
+            //     (Cur_CalSumU /       
             //      CURRENT_SAMPLE_CALIBRATION_COUNT);
             // Current.offset_v = (uint16)
             //     (Cur_CalSumV /
