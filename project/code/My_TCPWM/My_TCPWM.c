@@ -23,7 +23,7 @@ static const TCPWM_3PHASE_t TCPWM_3PHASE =
  * @param : /
  * @return: void
  * @date  : 2026-08-18
- * @author: LYF
+ * @author: L
  ************************************************/
 static void TCPWM_Master_Trigger_Init(void)
 {
@@ -89,7 +89,7 @@ static void TCPWM_Master_Trigger_Init(void)
  * @param : /
  * @return: void
  * @date  : 2026-08-18
- * @author: LYF
+ * @author: L
  ************************************************/
 static void TCPWM_Duty_Sync_Init(void)
 {
@@ -106,7 +106,7 @@ static void TCPWM_Duty_Sync_Init(void)
  * @param : phase 单相桥臂硬件描述
  * @return: void
  * @date  : 2026-08-14
- * @author: LYF
+ * @author: L
  ************************************************/
 static void TCPWM_GPIO_Init(const TCPWM_PHASE_t *phase)
 {
@@ -126,7 +126,7 @@ static void TCPWM_GPIO_Init(const TCPWM_PHASE_t *phase)
  * @param : /
  * @return: void
  * @date  : 2026-08-14
- * @author: LYF
+ * @author: L
  ************************************************/
 static void TCPWM_Clock_Init(const TCPWM_PHASE_t *phase)
 {
@@ -150,7 +150,7 @@ static void TCPWM_Clock_Init(const TCPWM_PHASE_t *phase)
  * @param : /
  * @return: void
  * @date  : 2026-07-27
- * @author: LYF
+ * @author: L
  ************************************************/
 static void TCPWM_Phase_Init(const TCPWM_PHASE_t *phase)
 {
@@ -210,7 +210,7 @@ static void TCPWM_Phase_Init(const TCPWM_PHASE_t *phase)
  * @param : phase 单相桥臂硬件描述
  * @return: void
  * @date  : 2026-08-14
- * @author: LYF
+ * @author: L
  ************************************************/
 static void TCPWM_SinglePhase_Init(const TCPWM_PHASE_t *phase)
 {
@@ -224,7 +224,7 @@ static void TCPWM_SinglePhase_Init(const TCPWM_PHASE_t *phase)
  * @param : Duty 占空比，范围0~10000
  * @return: TCPWM比较值
  * @date  : 2026-08-14
- * @author: LYF
+ * @author: L
  ************************************************/
 static uint32 TCPWM_DutyToCompare(uint16 Duty)
 {

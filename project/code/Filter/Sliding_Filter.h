@@ -22,7 +22,7 @@ typedef struct
  * @param : WindowSize 窗口长度
  * @return: void
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 void Sliding_Filter_Init(Sliding_Filter_t *Filter, float *WindowData, uint8 WindowSize);
 
@@ -32,7 +32,7 @@ void Sliding_Filter_Init(Sliding_Filter_t *Filter, float *WindowData, uint8 Wind
  * @param : NewData 新数据
  * @return: void
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 void Sliding_Filter_Update(Sliding_Filter_t *Filter, float NewData);
 
@@ -41,7 +41,7 @@ void Sliding_Filter_Update(Sliding_Filter_t *Filter, float NewData);
  * @param : Filter 滑动滤波器
  * @return: 普通滑动平均值
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 float Sliding_Filter_Get(Sliding_Filter_t *Filter);
 
@@ -50,7 +50,7 @@ float Sliding_Filter_Get(Sliding_Filter_t *Filter);
  * @param : Filter 滑动滤波器
  * @return: 去极值滑动平均值
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 float Sliding_Filter_GetTrimmed(Sliding_Filter_t *Filter);
 
@@ -59,7 +59,7 @@ float Sliding_Filter_GetTrimmed(Sliding_Filter_t *Filter);
  * @param : Filter 滑动滤波器
  * @return: 四舍五入后的普通滑动平均值
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 uint16 Sliding_Filter_GetUint16(Sliding_Filter_t *Filter);
 
@@ -68,7 +68,7 @@ uint16 Sliding_Filter_GetUint16(Sliding_Filter_t *Filter);
  * @param : Filter 滑动滤波器
  * @return: 四舍五入后的去极值滑动平均值
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 uint16 Sliding_Filter_GetTrimmedUint16(Sliding_Filter_t *Filter);
 

@@ -40,7 +40,7 @@ static const AdcChannel_t AdcChannels[] =
  * @param : ClockDst SAR外设时钟目标
  * @return: void
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 static void My_ADC_Clock_Init(en_clk_dst_t ClockDst)
 {
@@ -66,7 +66,7 @@ static void My_ADC_Clock_Init(en_clk_dst_t ClockDst)
  * @param : Hsiom 模拟输入复用功能
  * @return: void
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 static void My_ADC_Pin_Init(volatile stc_GPIO_PRT_t *Port, uint32 Pin, en_hsiom_sel_t Hsiom)
 {
@@ -83,7 +83,7 @@ static void My_ADC_Pin_Init(volatile stc_GPIO_PRT_t *Port, uint32 Pin, en_hsiom_
  * @param : ClockDst SAR模块时钟目标
  * @return: void
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 static void My_ADC_Sar_Init(volatile stc_PASS_SAR_t *Sar,en_clk_dst_t ClockDst)
 {
@@ -104,7 +104,7 @@ static void My_ADC_Sar_Init(volatile stc_PASS_SAR_t *Sar,en_clk_dst_t ClockDst)
  * @param : AdcChannel ADC通道硬件描述
  * @return: void
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 static void My_ADC_Channel_Init(const AdcChannel_t *AdcChannel)
 {
@@ -143,7 +143,7 @@ static void My_ADC_Channel_Init(const AdcChannel_t *AdcChannel)
  * @param : LastValue 上一次有效采样值
  * @return: ADC原始采样值
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 static uint16 My_ADC_ReadResult(const AdcChannel_t *AdcChannel, uint16 LastValue)
 {
@@ -171,7 +171,7 @@ static uint16 My_ADC_ReadResult(const AdcChannel_t *AdcChannel, uint16 LastValue
  * @param : ChannelIndex 当前中断对应的ADC通道索引
  * @return: true两路均已完成，false至少一路未完成
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 static bool My_ADC_IsBothGroupDone(uint32 ChannelIndex)
 {
@@ -191,7 +191,7 @@ static bool My_ADC_IsBothGroupDone(uint32 ChannelIndex)
  * @param : ChannelIndex ADC通道描述数组索引
  * @return: void
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
 {
@@ -261,7 +261,7 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
  * @param : /
  * @return: void
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 static void My_ADC1_ISR(void)
 {
@@ -273,7 +273,7 @@ static void My_ADC1_ISR(void)
  * @param : /
  * @return: void
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 static void My_ADC2_ISR(void)
 {
@@ -285,7 +285,7 @@ static void My_ADC2_ISR(void)
  * @param : /
  * @return: void
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 static void My_ADC_Interrupt_Init(void)
 {
@@ -307,7 +307,7 @@ static void My_ADC_Interrupt_Init(void)
  * @param : /
  * @return: void
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L   
  ************************************************/
 static void My_ADC_Trigger_Init(void)
 {

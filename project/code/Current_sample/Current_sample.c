@@ -13,7 +13,7 @@ static float Cur_FilterBufV[CURRENT_SAMPLE_FILTER_WINDOW_SIZE];
  * @param : AdcCal 扣除零偏后的ADC值
  * @return: 电流值，单位为安培
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 static float Current_Sample_AdcToCurrent(int16 AdcCal)
 {
@@ -29,7 +29,7 @@ static float Current_Sample_AdcToCurrent(int16 AdcCal)
  * @param : FilterV V相滤波后的ADC值
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 static void Current_Sample_UpdateCal(uint16 FilterU, uint16 FilterV)
 {

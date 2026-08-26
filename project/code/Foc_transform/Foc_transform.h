@@ -45,7 +45,7 @@ typedef struct
  * @param : CurrentB B相电流
  * @return: Clark变换结果
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 Clark_t foc_clark_calc(float CurrentA, float CurrentB);
 
@@ -55,7 +55,7 @@ Clark_t foc_clark_calc(float CurrentA, float CurrentB);
  * @param : ElectricalAngle 电角度，0~32767对应0~2PI
  * @return: Park变换结果
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 Park_t foc_park_calc(Clark_t Clark, uint16 ElectricalAngle);
 
@@ -65,7 +65,7 @@ Park_t foc_park_calc(Clark_t Clark, uint16 ElectricalAngle);
  * @param : ElectricalAngle 电角度，0~32767对应0~2PI
  * @return: Alpha/Beta轴输出
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 AlphaBeta_t foc_ipark_calc(InversePark_t InversePark,
                            uint16 ElectricalAngle);

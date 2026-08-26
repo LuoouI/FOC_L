@@ -17,7 +17,7 @@ SVPWM_t SVPWM =
  * @param : Uq q轴电压指针
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 static void SVPWM_DQ_LimitVoltage(float *Ud, float *Uq)
 {
@@ -50,7 +50,7 @@ static void SVPWM_DQ_LimitVoltage(float *Ud, float *Uq)
  * @param : PhaseVoltage 相电压，单位为V
  * @return: 万分比占空比
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 static uint16 SVPWM_VoltageToDuty(float PhaseVoltage)
 {

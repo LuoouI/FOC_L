@@ -31,7 +31,7 @@ typedef struct
  * @param : Max 上限
  * @return: 限幅后的数值
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 float Float_Limit(float Value, float Min, float Max);
 
@@ -42,7 +42,7 @@ float Float_Limit(float Value, float Min, float Max);
  * @param : Max 上限
  * @return: 限幅后的数值
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 int32 Int_Limit(int32 Value, int32 Min, int32 Max);
 
@@ -51,7 +51,7 @@ int32 Int_Limit(int32 Value, int32 Min, int32 Max);
  * @param : Angle 待归一化角度
  * @return: 0~32767范围内的单圈角度
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 uint16 Angle_Wrap(int32 Angle);
 
@@ -60,7 +60,7 @@ uint16 Angle_Wrap(int32 Angle);
  * @param : Unwrap 角度解缠状态
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 void Angle_Unwrap_Clear(AngleUnwrap_t *Unwrap);
 
@@ -70,7 +70,7 @@ void Angle_Unwrap_Clear(AngleUnwrap_t *Unwrap);
  * @param : Angle 当前单圈角度，范围0~32767
  * @return: 连续多圈角度
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 int32 Angle_Unwrap(AngleUnwrap_t *Unwrap, uint16 Angle);
 

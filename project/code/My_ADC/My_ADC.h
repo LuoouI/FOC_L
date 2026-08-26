@@ -40,7 +40,7 @@ typedef struct
  * @param : /
  * @return: void
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 void My_ADC_Current_Init(void);
 
@@ -49,7 +49,7 @@ void My_ADC_Current_Init(void);
  * @param : /
  * @return: void
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 void My_ADC_Voltage_Init(void);
 
@@ -58,7 +58,7 @@ void My_ADC_Voltage_Init(void);
  * @param : /
  * @return: ADC原始采样值
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 uint16 My_ADC_GetBatteryRawValue(void);
 
@@ -67,7 +67,7 @@ uint16 My_ADC_GetBatteryRawValue(void);
  * @param : /
  * @return: 母线电压，单位V
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 float My_ADC_GetBatteryVoltage(void);
 

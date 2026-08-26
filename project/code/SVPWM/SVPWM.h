@@ -22,7 +22,7 @@ extern SVPWM_t SVPWM;
  * @param : /
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 void VBUS_Get(void);
 
@@ -31,7 +31,7 @@ void VBUS_Get(void);
  * @param : /
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 void SVPWM_DQ_Limit_Update(void);
 
@@ -45,7 +45,7 @@ void SVPWM_DQ_Limit_Update(void);
  * @param : DutyC C相占空比，范围0~10000，可为空
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 void foc_voltage_calc_duty(float Ud,
                            float Uq,

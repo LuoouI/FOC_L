@@ -47,7 +47,7 @@ extern volatile motor_current_t Current;
  * @param : /
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 void Current_Sample_Init(void);
 
@@ -56,7 +56,7 @@ void Current_Sample_Init(void);
  * @param : /
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 void Current_Sample_StartCalibration(void);
 
@@ -66,7 +66,7 @@ void Current_Sample_StartCalibration(void);
  * @param : AdcRawV V相ADC原始采样值
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV);
 
@@ -75,7 +75,7 @@ void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV);
  * @param : ElectricalAngle 电角度，0~32767对应0~2PI
  * @return: void
  * @date  : 2026-08-17
- * @author: LYF
+ * @author: L
  ************************************************/
 void Current_Sample_Transform(uint16 ElectricalAngle);
 

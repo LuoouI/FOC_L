@@ -23,7 +23,7 @@ typedef enum
  * @param : /
  * @return: void
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 void My_LED_Init(void);
 
@@ -32,7 +32,7 @@ void My_LED_Init(void);
  * @param : LedState 指示灯状态
  * @return: void
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 void My_LED_SetLedState(LED_State_t LedState);
 
@@ -41,7 +41,7 @@ void My_LED_SetLedState(LED_State_t LedState);
  * @param : ElapsedMs 距离上次调用经过的毫秒数
  * @return: void
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 void My_LED_Service(uint32 ElapsedMs);
 
@@ -50,7 +50,7 @@ void My_LED_Service(uint32 ElapsedMs);
  * @param : /
  * @return: LED_State_t 当前指示灯状态
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 LED_State_t My_LED_GetLedState(void);
 
@@ -59,7 +59,7 @@ LED_State_t My_LED_GetLedState(void);
  * @param : /
  * @return: void
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 void My_LED_CheckVoltage(void);
 

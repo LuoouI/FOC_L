@@ -6,7 +6,7 @@
  * @param : Value 待转换的浮点滤波结果
  * @return: 转换后的uint16滤波结果
  * @date  : 2026-08-16
- * @author: LYF
+ * @author: L
  ************************************************/
 static uint16 Sliding_Filter_ToUint16(float Value)
 {

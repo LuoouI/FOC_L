@@ -40,7 +40,7 @@ typedef struct
  * @param : /
  * @return: void
  * @date  : 2026-08-14
- * @author: LYF
+ * @author: L
  ************************************************/
 void My_TCPWM_Init(void);
 
@@ -49,7 +49,7 @@ void My_TCPWM_Init(void);
  * @param : /
  * @return: void
  * @date  : 2026-08-14
- * @author: LYF
+ * @author: L
  ************************************************/
 void My_TCPWM_Start(void);
 
@@ -60,7 +60,7 @@ void My_TCPWM_Start(void);
  * @param : DutyC C相占空比，范围0~10000
  * @return: void
  * @date  : 2026-08-14
- * @author: LYF
+ * @author: L
  ************************************************/
 void My_TCPWM_SetDuty(uint16 DutyA, uint16 DutyB, uint16 DutyC);
 

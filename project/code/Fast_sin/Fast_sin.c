@@ -44,7 +44,7 @@ static const uint16 FastSinQuarterTable[FAST_SIN_QUARTER_COUNT + 1u] =
  * @param : Angle 电角度，0~32767对应0~2PI
  * @return: 正弦定标值，范围-10000~10000
  * @date  : 2026-08-15
- * @author: LYF
+ * @author: L
  ************************************************/
 static int32 FastSinLookup(uint16 Angle)
 {
