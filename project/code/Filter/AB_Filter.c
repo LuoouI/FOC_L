@@ -1,4 +1,5 @@
 #include "AB_Filter.h"
+#include "Function/Function.h"
 
 ABFilter_t Angle = {0};     // 角度滤波器
 
@@ -41,13 +42,13 @@ float ABFilter_Update(ABFilter_t *Filter, float MeasuredAngle)
 
     AngleError = MeasuredAngle - Filter->ThetaFilter;
 
-    if (AngleError > AB_FILTER_PI)
+    if (AngleError > PI)
     {
-        AngleError -= AB_FILTER_TWO_PI;
+        AngleError -= TWO_PI;
     }
-    else if (AngleError < -AB_FILTER_PI)
+    else if (AngleError < -PI)
     {
-        AngleError += AB_FILTER_TWO_PI;
+        AngleError += TWO_PI;
     }
 
     ThetaPrediction = Filter->ThetaFilter +
@@ -57,14 +58,14 @@ float ABFilter_Update(ABFilter_t *Filter, float MeasuredAngle)
     Filter->OmegaFilter = Filter->OmegaFilter +
                           (Filter->B / Filter->Ts) * AngleError;
 
-    while (Filter->ThetaFilter >= AB_FILTER_TWO_PI)
+    while (Filter->ThetaFilter >= TWO_PI)
     {
-        Filter->ThetaFilter -= AB_FILTER_TWO_PI;
+        Filter->ThetaFilter -= TWO_PI;
     }
 
     while (Filter->ThetaFilter < 0.0f)
     {
-        Filter->ThetaFilter += AB_FILTER_TWO_PI;
+        Filter->ThetaFilter += TWO_PI;
     }
 
     Filter->PreviousAngle = MeasuredAngle;
