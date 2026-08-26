@@ -53,6 +53,7 @@ void pit0_ch2_isr()                     // 定时器通道 2 周期中断服务�
     pit_isr_flag_clear(PIT_CH2);
     
     VBUS_Get();    // 获取母线电压
+    RPM_Cal();      // 转速计算
 
 }
 

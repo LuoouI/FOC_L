@@ -76,6 +76,10 @@ int main(void)
         // 此处编写需要循环执行的代码   
         My_Key_Service();
    
+        printf("%d,%d,%f\r\n",
+            Motor.Encoder.Mechanical_angle,
+            Motor.Encoder.Electrical_angle,
+            Motor.Encoder.Spd_rpm);
         // 此处编写需要循环执行的代码
     }
 }

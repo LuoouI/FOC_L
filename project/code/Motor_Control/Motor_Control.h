@@ -4,6 +4,7 @@
 #include "zf_common_headfile.h"
 #include "Foc_transform/Foc_transform.h"
 #include "PID/PID.h"
+#include "Function/Function.h"
 
 #define MOTOR_CONTROL_PERIOD_US               (50u)   // 电机控制周期
 #define MOTOR_OPEN_LOOP_DEFAULT_STEP          (60u)   // 单周期默认电角度增量，约314转/分钟（7对极、50us周期）
@@ -44,8 +45,9 @@ typedef struct
     menc15a_module_enum Sensor_id;              // 编码器模块编号
     int8 Direction;                             // 编码器方向，取值为+1或-1
     uint16 Zero_offset;                         // 机械角零偏
-    uint16 Mechanical_angle;                    // 机械角，范围0~32767
+    volatile uint16 Mechanical_angle;           // 机械角，范围0~32767
     uint16 Electrical_angle;                    // 电角度，范围0~32767
+    volatile float Spd_rpm;                     // 滤波后的机械转速，单位为转/分钟
 } Motor_Encoder_t;
 
 /*===========================================================================*/
@@ -121,9 +123,9 @@ extern Foc_motor_t Motor;                // 电机控制对象
 void Angle_Update(void);
 
 /***********************************************
- * @brief : 计算电机转速
+ * @brief : 使用AB滤波器计算电机机械转速，需按1 kHz周期调用
  * @param : 无
- * @return: 无
+ * @return: 无，结果保存到Motor.Encoder.Spd_rpm
  * @date  : 2026-08-26
  * @author: L
  ************************************************/

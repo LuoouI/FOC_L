@@ -4,71 +4,74 @@
 ABFilter_t Angle = {0};     // 角度滤波器
 
 /* 初始化AB滤波器 */
-void ABFilter_Init(ABFilter_t *Filter, float SampleTime, float ResponseRate)
+void ABFilter_Init(ABFilter_t *Flt, const ABFilterParam_t *Param)
 {
-    if ((Filter == NULL) || (SampleTime <= 0.0f))
+    if ((Flt == NULL) ||
+        (Param == NULL) ||
+        (Param->Ts <= 0.0f) ||
+        (Param->Bw <= 0.0f))
     {
         return;
     }
 
-    Filter->Ts = SampleTime;
-    Filter->A = ResponseRate * SampleTime;
-    Filter->B = 0.5f * Filter->A * Filter->A;
-    Filter->ThetaFilter = 0.0f;
-    Filter->OmegaFilter = 0.0f;
-    Filter->PreviousAngle = 0.0f;
-    Filter->FirstFlag = 0U;
+    Flt->Param = *Param;
+    Flt->A = Param->Bw * Param->Ts;
+    Flt->B = 0.5f * Flt->A * Flt->A;
+    Flt->Theta = 0.0f;
+    Flt->Omega = 0.0f;
+    Flt->PrevAng = 0.0f;
+    Flt->First = 0U;
 }
 
 /* 更新AB滤波器并输出角速度 */
-float ABFilter_Update(ABFilter_t *Filter, float MeasuredAngle)
+float ABFilter_Update(ABFilter_t *Flt, float MeasAng)
 {
-    float AngleError;
-    float ThetaPrediction;
+    float AngErr;
+    float ThetaPred;
 
-    if ((Filter == NULL) || (Filter->Ts <= 0.0f))
+    if ((Flt == NULL) || (Flt->Param.Ts <= 0.0f))
     {
         return 0.0f;
     }
 
-    if (Filter->FirstFlag == 0U)
+    if (Flt->First == 0U)
     {
-        Filter->ThetaFilter = MeasuredAngle;
-        Filter->OmegaFilter = 0.0f;
-        Filter->PreviousAngle = MeasuredAngle;
-        Filter->FirstFlag = 1U;
+        Flt->Theta = MeasAng;
+        Flt->Omega = 0.0f;
+        Flt->PrevAng = MeasAng;
+        Flt->First = 1U;
         return 0.0f;
     }
 
-    AngleError = MeasuredAngle - Filter->ThetaFilter;
+    AngErr = MeasAng - Flt->Theta;
 
-    if (AngleError > PI)
+    if (AngErr > PI)
     {
-        AngleError -= TWO_PI;
+        AngErr -= TWO_PI;
     }
-    else if (AngleError < -PI)
+    else if (AngErr < -PI)
     {
-        AngleError += TWO_PI;
-    }
-
-    ThetaPrediction = Filter->ThetaFilter +
-                      Filter->OmegaFilter * Filter->Ts;
-
-    Filter->ThetaFilter = ThetaPrediction + Filter->A * AngleError;
-    Filter->OmegaFilter = Filter->OmegaFilter +
-                          (Filter->B / Filter->Ts) * AngleError;
-
-    while (Filter->ThetaFilter >= TWO_PI)
-    {
-        Filter->ThetaFilter -= TWO_PI;
+        AngErr += TWO_PI;
     }
 
-    while (Filter->ThetaFilter < 0.0f)
+    ThetaPred = Flt->Theta +
+                Flt->Omega * Flt->Param.Ts;
+
+    Flt->Theta = ThetaPred + Flt->A * AngErr;
+    Flt->Omega = Flt->Omega +
+                 (Flt->B / Flt->Param.Ts) * AngErr;
+
+    while (Flt->Theta >= TWO_PI)
     {
-        Filter->ThetaFilter += TWO_PI;
+        Flt->Theta -= TWO_PI;
     }
 
-    Filter->PreviousAngle = MeasuredAngle;
+    while (Flt->Theta < 0.0f)
+    {
+        Flt->Theta += TWO_PI;
+    }
 
-    return Filter->OmegaFilter;
+    Flt->PrevAng = MeasAng;
+
+    return Flt->Omega;
 }
