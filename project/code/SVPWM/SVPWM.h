@@ -13,6 +13,9 @@ typedef struct
     float VBUS;                         // 当前母线电压，单位为V
     float V_Margin;                     // 线性调制区电压裕量，范围0~1
     float DQ_Limit;                     // d/q电压矢量幅值上限，单位为V
+    uint16 DutyA;                       // 最近一次A相PWM占空比，范围0~10000
+    uint16 DutyB;                       // 最近一次B相PWM占空比，范围0~10000
+    uint16 DutyC;                       // 最近一次C相PWM占空比，范围0~10000
 } SVPWM_t;
 
 extern SVPWM_t SVPWM;
@@ -53,5 +56,16 @@ void foc_voltage_calc_duty(float Ud,
                            uint16 *DutyA,
                            uint16 *DutyB,
                            uint16 *DutyC);
+
+/***********************************************
+ * @brief : 更新最近一次三相PWM占空比缓存
+ * @param : DutyA A相占空比，范围0~10000
+ * @param : DutyB B相占空比，范围0~10000
+ * @param : DutyC C相占空比，范围0~10000
+ * @return: 无
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
+void SVPWM_DutyCache_Update(uint16 DutyA, uint16 DutyB, uint16 DutyC);
 
 #endif

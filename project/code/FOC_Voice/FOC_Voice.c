@@ -3,6 +3,7 @@
 #include "Function/Function.h"
 #include "Motor_Control/Motor_Control.h"
 #include "My_TCPWM/My_TCPWM.h"
+#include "SVPWM/SVPWM.h"
 
 /*===========================================================================*/
 /*  《奇迹再现》主歌，1=A                                                     */
@@ -180,6 +181,10 @@ static void FOC_Voice_OutputNeutral(void)
         (uint16)(TCPWM_DUTY_MAX / 2u),
         (uint16)(TCPWM_DUTY_MAX / 2u),
         (uint16)(TCPWM_DUTY_MAX / 2u));
+    SVPWM_DutyCache_Update(
+        (uint16)(SVPWM_DUTY_MAX / 2u),
+        (uint16)(SVPWM_DUTY_MAX / 2u),
+        (uint16)(SVPWM_DUTY_MAX / 2u));
 }
 
 /***********************************************
@@ -334,6 +339,7 @@ static void FOC_Voice_Output(float Envelope)
     DutyC = (uint16)(TCPWM_DUTY_MAX / 2u);
 
     My_TCPWM_SetDuty(DutyA, DutyB, DutyC);
+    SVPWM_DutyCache_Update(DutyA, DutyB, DutyC);
 }
 
 void FOC_Voice_Start(void)

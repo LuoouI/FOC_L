@@ -116,6 +116,10 @@ static void Motor_openloop_set(float Uq, float Ud, int16 Step)
             (uint16)(TCPWM_DUTY_MAX / 2u),
             (uint16)(TCPWM_DUTY_MAX / 2u),
             (uint16)(TCPWM_DUTY_MAX / 2u));
+        SVPWM_DutyCache_Update(
+            (uint16)(SVPWM_DUTY_MAX / 2u),
+            (uint16)(SVPWM_DUTY_MAX / 2u),
+            (uint16)(SVPWM_DUTY_MAX / 2u));
         return;
     }
 

@@ -51,7 +51,7 @@ int main(void)
     
     debug_init();                       // 调试串口初始化
 
-    FOC_Protocol_Init();                // 初始化上位机同步音乐协议
+    FOC_Protocol_Init();                // 初始化上位机开环控制协议
    
     key_init(10);                       // 按键初始化
 
@@ -78,7 +78,7 @@ int main(void)
         // 此处编写需要循环执行的代码   
         My_Key_Service();
 
-        FOC_Protocol_Service();
+        FOC_Protocol_Service();          // 主循环处理串口接收和遥测发送
 
         // 此处编写需要循环执行的代码
     }

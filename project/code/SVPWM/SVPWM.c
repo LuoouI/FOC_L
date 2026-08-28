@@ -8,7 +8,10 @@ SVPWM_t SVPWM =
 {
     .VBUS = 24.0f,
     .V_Margin = 0.95f,
-    .DQ_Limit = 24.0f * 0.95f / SQRT3
+    .DQ_Limit = 24.0f * 0.95f / SQRT3,
+    .DutyA = SVPWM_DUTY_MAX / 2u,
+    .DutyB = SVPWM_DUTY_MAX / 2u,
+    .DutyC = SVPWM_DUTY_MAX / 2u
 };
 
 /***********************************************
@@ -141,4 +144,17 @@ void foc_voltage_calc_duty(float Ud,
     {
         *DutyC = SVPWM_VoltageToDuty(Uc);
     }
+
+    if ((DutyA != NULL) && (DutyB != NULL) && (DutyC != NULL))
+    {
+        SVPWM_DutyCache_Update(*DutyA, *DutyB, *DutyC);
+    }
+}
+
+/* 缓存最近一次实际输出的三相占空比。 */
+void SVPWM_DutyCache_Update(uint16 DutyA, uint16 DutyB, uint16 DutyC)
+{
+    SVPWM.DutyA = DutyA;
+    SVPWM.DutyB = DutyB;
+    SVPWM.DutyC = DutyC;
 }
