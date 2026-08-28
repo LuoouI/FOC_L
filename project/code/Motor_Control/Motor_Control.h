@@ -6,12 +6,6 @@
 #include "PID/PID.h"
 #include "Function/Function.h"
 
-#define MOTOR_CONTROL_PERIOD_US               (50u)   // 电机控制周期
-#define MOTOR_OPEN_LOOP_DEFAULT_STEP          (60u)   // 单周期默认电角度增量，约314转/分钟（7对极、50us周期）
-#define MOTOR_OPEN_LOOP_ALIGN_MS              (200u)  // 开环启动定向时间
-#define MOTOR_OPEN_LOOP_ALIGN_COUNT           ((MOTOR_OPEN_LOOP_ALIGN_MS * 1000u) / MOTOR_CONTROL_PERIOD_US)
-#define MOTOR_DUTY_RAMP_DEFAULT_STEP          (0.05f) // 单控制周期默认占空比斜坡增量
-
 /*===========================================================================*/
 /*  电机零点校准参数                                                          */
 /*===========================================================================*/
@@ -34,7 +28,8 @@ extern const Motor_ZeroCalib_t Motor_zeroCalib;
 typedef enum
 {
     MOTOR_CONTROL_OPEN_LOOP = 0,                // 开环电压矢量控制
-    MOTOR_CONTROL_ENCODER_FOC                   // 磁编码器电压矢量控制
+    MOTOR_CONTROL_ENCODER_FOC,                  // 磁编码器电压矢量控制
+    MOTOR_CONTROL_VOICE                         // 电机音乐播放控制
 } Motor_control_mode_t;
 
 /*===========================================================================*/
@@ -45,9 +40,9 @@ typedef struct
     menc15a_module_enum Sensor_id;              // 编码器模块编号
     int8 Direction;                             // 编码器方向，取值为+1或-1
     uint16 Zero_offset;                         // 机械角零偏
-    volatile uint16 Mechanical_angle;           // 机械角，范围0~32767
+    uint16 Mechanical_angle;           // 机械角，范围0~32767
     uint16 Electrical_angle;                    // 电角度，范围0~32767
-    volatile float Spd_rpm;                     // 滤波后的机械转速，单位为转/分钟
+    float Spd_rpm;                     // 滤波后的机械转速，单位为转/分钟
 } Motor_Encoder_t;
 
 /*===========================================================================*/
@@ -56,8 +51,7 @@ typedef struct
 typedef struct
 {
     int16 Duty_target;                          // 输出幅值目标，范围-10000~10000
-    float Duty_output;                          // 斜坡处理后的实际输出幅值
-    float Duty_ramp_step;                       // 单控制周期输出幅值变化量
+    float Duty_output;                          // 实际输出幅值
 } Motor_Output_t;
 
 /*===========================================================================*/
@@ -65,8 +59,10 @@ typedef struct
 /*===========================================================================*/
 typedef struct
 {
+    float Uq;                                   // 开环q轴电压指令，单位为V
     uint16 Angle;                               // 开环电压矢量电角度
     int16 Step;                                 // 单周期电角度增量，负值表示反向
+    uint16 Align_count;                         // 启动定向所需控制周期数
     uint16 Hold_count;                          // 启动定向计数
     uint8 Started;                              // 开环启动状态
 } Motor_OpenLoop_t;
@@ -89,7 +85,7 @@ typedef struct
 /*===========================================================================*/
 typedef struct
 {
-    Motor_Encoder_t Encoder;                   // 编码器配置及角度反馈
+    Motor_Encoder_t Encoder;                    // 编码器配置及角度反馈
     Motor_Output_t Output;                      // 电机输出状态
     Motor_OpenLoop_t Open_loop;                 // 开环控制状态
     Foc_CurrentLoop_t Current_loop;             // 电流环对象
@@ -130,5 +126,14 @@ void Angle_Update(void);
  * @author: L
  ************************************************/
 void RPM_Cal(void);
+
+/***********************************************
+ * @brief : 根据当前控制模式执行一次电机控制周期
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-27
+ * @author: L
+ ************************************************/
+void Motor_Control_Loop(void);
 
 #endif

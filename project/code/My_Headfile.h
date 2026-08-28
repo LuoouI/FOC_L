@@ -10,6 +10,8 @@
 #include "My_LED/My_LED.h"
 #include "Function/Function.h"
 #include "Fast_sin/Fast_sin.h"
+#include "FOC_Voice/FOC_Voice.h"
+#include "FOC_Protocol/FOC_Protocol.h"
 #include "Foc_transform/Foc_transform.h"
 #include "PID/PID.h"
 #include "SVPWM/SVPWM.h"

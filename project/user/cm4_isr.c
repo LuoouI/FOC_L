@@ -54,6 +54,7 @@ void pit0_ch2_isr()                     // 定时器通道 2 周期中断服务�
     
     VBUS_Get();    // 获取母线电压
     RPM_Cal();      // 转速计算
+    FOC_Protocol_Tick1ms(); // 更新上位机协议时间基准
 
 }
 

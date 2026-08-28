@@ -3,7 +3,6 @@
 
 ABFilter_t Angle = {0};     // 角度滤波器
 
-/* 初始化AB滤波器 */
 void ABFilter_Init(ABFilter_t *Flt, const ABFilterParam_t *Param)
 {
     if ((Flt == NULL) ||
@@ -23,7 +22,6 @@ void ABFilter_Init(ABFilter_t *Flt, const ABFilterParam_t *Param)
     Flt->First = 0U;
 }
 
-/* 更新AB滤波器并输出角速度 */
 float ABFilter_Update(ABFilter_t *Flt, float MeasAng)
 {
     float AngErr;

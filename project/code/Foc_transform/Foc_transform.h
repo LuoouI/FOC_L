@@ -58,7 +58,7 @@ Clark_t foc_clark_calc(float CurrentA, float CurrentB);
  * @author: L
  ************************************************/
 Park_t foc_park_calc(Clark_t Clark, uint16 ElectricalAngle);
-
+    
 /***********************************************
  * @brief : 对d/q轴分量进行逆Park变换
  * @param : InversePark 逆Park变换输入

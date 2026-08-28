@@ -15,7 +15,7 @@
 #define RS   (0.28659f)                // 定子电阻，单位为欧姆
 #define FOC_TS (1.0f / 20000.0f)       // 电流环采样周期，单位为秒
 
-#define BW_HZ (250.0f)                 // 电流环带宽，单位为Hz
+#define BW_HZ (1000.0f)                 // 电流环带宽，单位为Hz
 #define OMEGA_C (2.0f * PI * BW_HZ)    // 电流环目标角频率，单位为rad/s
 
 /* 电流环连续时间参数：积分项在计算时再乘以采样周期。 */

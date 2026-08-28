@@ -254,6 +254,7 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
         Current_Sample_Update(AdcLastRawU, AdcLastRawV);
         
         Angle_Update();
+        Motor_Control_Loop();
     }
 }
 

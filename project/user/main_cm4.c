@@ -50,6 +50,8 @@ int main(void)
     clock_init(SYSTEM_CLOCK_160M);      // 时钟配置及系统初始化<务必保留>
     
     debug_init();                       // 调试串口初始化
+
+    FOC_Protocol_Init();                // 初始化上位机同步音乐协议
    
     key_init(10);                       // 按键初始化
 
@@ -75,11 +77,9 @@ int main(void)
     {
         // 此处编写需要循环执行的代码   
         My_Key_Service();
-   
-        printf("%d,%d,%f\r\n",
-            Motor.Encoder.Mechanical_angle,
-            Motor.Encoder.Electrical_angle,
-            Motor.Encoder.Spd_rpm);
+
+        FOC_Protocol_Service();
+
         // 此处编写需要循环执行的代码
     }
 }
