@@ -225,7 +225,7 @@ static void FOC_Protocol_HandleVoice(const uint8 *Payload)
     uint32 Session = FOC_Protocol_ReadU32(&Payload[4]);
     uint8 Need_start;
 
-    if ((Song_id == 0u) || (Song_id > FOC_VOICE_SONG_COUNT))
+    if ((Song_id == 0u) || (Song_id > FOC_Voice_GetSongCount()))
     {
         FOC_Protocol_StopControl();
         return;
@@ -386,6 +386,64 @@ static void FOC_Protocol_SendWaveform(void)
 }
 
 /***********************************************
+ * @brief : 逐首发送下位机内置乐曲编号和UTF-8名称
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
+static void FOC_Protocol_SendSongList(void)
+{
+    uint8 Frame[FOC_PROTOCOL_FRAME_MAX];
+    uint8 *Payload = &Frame[8];
+    const char *Song_name;
+    uint32 Name_length;
+    uint16 Payload_length;
+    uint16 Crc;
+    uint8 Song_count = FOC_Voice_GetSongCount();
+    uint8 Song_id;
+
+    for (Song_id = 1u; Song_id <= Song_count; Song_id++)
+    {
+        Song_name = FOC_Voice_GetSongName(Song_id);
+        if (Song_name == NULL)
+        {
+            continue;
+        }
+
+        Name_length = (uint32)strlen(Song_name);
+        if (Name_length > FOC_PROTOCOL_SONG_NAME_MAX)
+        {
+            Name_length = FOC_PROTOCOL_SONG_NAME_MAX;
+            while ((Name_length > 0u) &&
+                   (((uint8)Song_name[Name_length] & 0xc0u) == 0x80u))
+            {
+                Name_length--;
+            }
+        }
+        Payload_length = (uint16)(3u + Name_length);
+
+        memset(Frame, 0, sizeof(Frame));
+        Frame[0] = 0xaau;
+        Frame[1] = 0x55u;
+        Frame[2] = FOC_PROTOCOL_VERSION;
+        Frame[3] = FOC_PROTOCOL_FRAME_TYPE_SONG_LIST;
+        FOC_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
+        FOC_Protocol_WriteU16(&Frame[6], Payload_length);
+
+        Payload[0] = Song_id;
+        Payload[1] = Song_count;
+        Payload[2] = (uint8)Name_length;
+        memcpy(&Payload[3], Song_name, Name_length);
+
+        Crc = FOC_Protocol_Crc16(&Frame[2],
+                                 (uint16)(6u + Payload_length));
+        FOC_Protocol_WriteU16(&Frame[8u + Payload_length], Crc);
+        (void)debug_send_buffer(Frame, (uint32)(Payload_length + 10u));
+    }
+}
+
+/***********************************************
  * @brief : 校验并分发一帧FOC-UART报文
  * @param : Frame 完整帧地址
  * @param : Length 完整帧长度
@@ -417,6 +475,11 @@ static void FOC_Protocol_HandleFrame(const uint8 *Frame, uint16 Length)
         (Payload_length == FOC_PROTOCOL_CONTROL_LENGTH))
     {
         FOC_Protocol_HandleControl(&Frame[8]);
+    }
+    else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_SONG_LIST) &&
+             (Payload_length == 0u))
+    {
+        FOC_Protocol_SendSongList();
     }
 }
 

@@ -7,11 +7,11 @@
 #define FOC_VOICE_MIRACLE_BPM         (128u)     // 《奇迹再现》播放速度
 #define FOC_VOICE_TWINKLE_BPM         (120u)     // 《小星星》播放速度
 #define FOC_VOICE_ODE_BPM             (120u)     // 《欢乐颂》播放速度
+#define FOC_VOICE_ANGEL_BPM           (74u)      // 《天使的翅膀》片段播放速度
 #define FOC_VOICE_DUTY_AMPLITUDE      (500u)     // 单相音频占空比峰值，500对应5%
 #define FOC_VOICE_GATE_PERCENT        (92u)      // 单个音符的有效发声比例
 #define FOC_VOICE_RAMP_COUNT          (100u)     // 起音和释音斜坡控制周期数
 #define FOC_VOICE_SONG_ID             (1u)       // 《奇迹再现》曲目编号
-#define FOC_VOICE_SONG_COUNT          (3u)       // 下位机内置曲目数量
 
 /*===========================================================================*/
 /*  音符频率                                                                  */
@@ -66,6 +66,7 @@ typedef struct
 /*===========================================================================*/
 typedef struct
 {
+    const char *Name;                           // UTF-8编码乐曲名称
     const FOC_VoiceSection_t *Section_data;     // 乐曲段落数据
     uint16 Bpm;                                  // 乐曲播放速度
     uint8 Section_count;                         // 乐曲段落数量
@@ -100,12 +101,30 @@ void FOC_Voice_Start(void);
 
 /***********************************************
  * @brief : 从头播放指定的下位机内置乐曲
- * @param : Song_id 乐曲编号，范围1~FOC_VOICE_SONG_COUNT
+ * @param : Song_id 乐曲编号，范围1~内置乐曲数量
  * @return: 1表示开始播放，0表示乐曲编号无效
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
 uint8 FOC_Voice_StartSong(uint8 Song_id);
+
+/***********************************************
+ * @brief : 获取下位机内置乐曲数量
+ * @param : 无
+ * @return: 内置乐曲数量
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
+uint8 FOC_Voice_GetSongCount(void);
+
+/***********************************************
+ * @brief : 获取指定内置乐曲的UTF-8名称
+ * @param : Song_id 乐曲编号，范围1~内置乐曲数量
+ * @return: 乐曲名称地址，编号无效时返回空指针
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
+const char *FOC_Voice_GetSongName(uint8 Song_id);
 
 /***********************************************
  * @brief : 停止播放并关闭电机电压输出

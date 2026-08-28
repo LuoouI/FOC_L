@@ -134,22 +134,66 @@ static const FOC_VoiceSection_t Ode_song[] =
     {Ode_verse, (uint16)(sizeof(Ode_verse) / sizeof(Ode_verse[0]))}
 };
 
+/*===========================================================================*/
+/*  《天使的翅膀》指定副歌片段，移调为1=F                                    */
+/*===========================================================================*/
+static const FOC_VoiceNote_t Angel_verse[] =
+{
+    /* 第一乐句 */
+    {FOC_VOICE_PITCH_G4, 1u}, {FOC_VOICE_PITCH_A4, 1u},
+    {FOC_VOICE_PITCH_F4, 2u},
+    {FOC_VOICE_PITCH_D4, 2u}, {FOC_VOICE_PITCH_D4, 1u},
+    {FOC_VOICE_PITCH_A4, 1u}, {FOC_VOICE_PITCH_G4, 2u},
+    {FOC_VOICE_PITCH_F4, 1u}, {FOC_VOICE_PITCH_E4, 1u},
+    {FOC_VOICE_PITCH_D4, 4u}, {FOC_VOICE_PITCH_REST, 2u},
+
+    /* 第二乐句 */
+    {FOC_VOICE_PITCH_F4, 1u}, {FOC_VOICE_PITCH_G4, 1u},
+    {FOC_VOICE_PITCH_A4, 2u}, {FOC_VOICE_PITCH_C5, 2u},
+    {FOC_VOICE_PITCH_A4, 1u}, {FOC_VOICE_PITCH_G4, 1u},
+    {FOC_VOICE_PITCH_F4, 2u}, {FOC_VOICE_PITCH_G4, 1u},
+    {FOC_VOICE_PITCH_A4, 1u}, {FOC_VOICE_PITCH_F4, 4u},
+    {FOC_VOICE_PITCH_REST, 2u},
+
+    /* 结束乐句 */
+    {FOC_VOICE_PITCH_A4, 1u}, {FOC_VOICE_PITCH_G4, 1u},
+    {FOC_VOICE_PITCH_F4, 2u}, {FOC_VOICE_PITCH_D4, 2u},
+    {FOC_VOICE_PITCH_F4, 1u}, {FOC_VOICE_PITCH_G4, 1u},
+    {FOC_VOICE_PITCH_A4, 2u}, {FOC_VOICE_PITCH_G4, 1u},
+    {FOC_VOICE_PITCH_E4, 1u}, {FOC_VOICE_PITCH_F4, 2u},
+    {FOC_VOICE_PITCH_E4, 2u}, {FOC_VOICE_PITCH_D4, 8u}
+};
+
+static const FOC_VoiceSection_t Angel_song[] =
+{
+    {Angel_verse, (uint16)(sizeof(Angel_verse) / sizeof(Angel_verse[0]))}
+};
+
 static const FOC_VoiceSong_t Voice_songs[] =
 {
     {
+        "奇迹再现",
         Miracle_song,
         FOC_VOICE_MIRACLE_BPM,
         (uint8)(sizeof(Miracle_song) / sizeof(Miracle_song[0]))
     },
     {
+        "小星星",
         Twinkle_song,
         FOC_VOICE_TWINKLE_BPM,
         (uint8)(sizeof(Twinkle_song) / sizeof(Twinkle_song[0]))
     },
     {
+        "欢乐颂",
         Ode_song,
         FOC_VOICE_ODE_BPM,
         (uint8)(sizeof(Ode_song) / sizeof(Ode_song[0]))
+    },
+    {
+        "天使的翅膀（片段）",
+        Angel_song,
+        FOC_VOICE_ANGEL_BPM,
+        (uint8)(sizeof(Angel_song) / sizeof(Angel_song[0]))
     }
 };
 
@@ -349,7 +393,7 @@ void FOC_Voice_Start(void)
 
 uint8 FOC_Voice_StartSong(uint8 Song_id)
 {
-    if ((Song_id == 0u) || (Song_id > FOC_VOICE_SONG_COUNT))
+    if ((Song_id == 0u) || (Song_id > FOC_Voice_GetSongCount()))
     {
         return 0u;
     }
@@ -373,6 +417,21 @@ uint8 FOC_Voice_StartSong(uint8 Song_id)
     Motor.Control_mode = MOTOR_CONTROL_VOICE;
 
     return 1u;
+}
+
+uint8 FOC_Voice_GetSongCount(void)
+{
+    return (uint8)(sizeof(Voice_songs) / sizeof(Voice_songs[0]));
+}
+
+const char *FOC_Voice_GetSongName(uint8 Song_id)
+{
+    if ((Song_id == 0u) || (Song_id > FOC_Voice_GetSongCount()))
+    {
+        return NULL;
+    }
+
+    return Voice_songs[Song_id - 1u].Name;
 }
 
 void FOC_Voice_Stop(void)

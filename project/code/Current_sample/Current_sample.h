@@ -2,14 +2,12 @@
 #define CURRENT_SAMPLE_H
 
 #include "zf_common_headfile.h"
-#include "Filter/Sliding_Filter.h"
 #include "Foc_transform/Foc_transform.h"
 
 #define CURRENT_SAMPLE_ADC_REF_VOLTAGE       (3.3f)       // ADC参考电压
 #define CURRENT_SAMPLE_ADC_MAX_VALUE         (4095.0f)    // 12位ADC最大采样值
 #define CURRENT_SAMPLE_AMPLIFIER_GAIN        (20.0f)      // 电流采样运放增益
 #define CURRENT_SAMPLE_SHUNT_RESISTANCE      (0.002f)     // 电流采样电阻，单位为欧姆
-#define CURRENT_SAMPLE_FILTER_WINDOW_SIZE    (3u)         // 电流采样滤波窗口长度
 #define CURRENT_SAMPLE_CALIBRATION_COUNT     (256u)       // 零电流状态下的偏置校准次数
 
 /*===========================================================================*/
@@ -25,8 +23,8 @@ typedef struct
     uint16 offset_v;        // V相ADC零偏
     uint16 offset_w;        // W相ADC零偏，当前两电阻采样硬件为零
 
-    int16 adc_cal_u;        // U相滤波后扣除零偏的ADC值
-    int16 adc_cal_v;        // V相滤波后扣除零偏的ADC值
+    int16 adc_cal_u;        // U相原始采样扣除零偏后的ADC值
+    int16 adc_cal_v;        // V相原始采样扣除零偏后的ADC值
     int16 adc_cal_w;        // W相由U、V相电流重构的ADC值
 
     float current_u;        // U相电流，单位为安培
@@ -43,7 +41,7 @@ typedef struct
 extern volatile motor_current_t Current;
 
 /***********************************************
- * @brief : 初始化三相电流采样数据和滤波器
+ * @brief : 初始化三相电流采样数据
  * @param : /
  * @return: void
  * @date  : 2026-08-17
