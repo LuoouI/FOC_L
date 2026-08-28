@@ -12,6 +12,8 @@
 typedef struct
 {
     float  Voltage;                      // 零点校准d轴电压
+    uint16 Ramp_count;                   // 校准锁定电压渐升步数
+    uint16 Ramp_ms;                      // 校准锁定电压渐升步间隔
     uint16 Hold_ms;                      // 校准起始定位保持时间
     uint16 Step_count;                   // 零点牵引步数
     uint16 Step_ms;                      // 零点牵引步间隔
@@ -126,6 +128,15 @@ void Angle_Update(void);
  * @author: L
  ************************************************/
 void RPM_Cal(void);
+
+/***********************************************
+ * @brief : 在主循环中阻塞执行桥臂自检及编码器零点校准
+ * @param : 无
+ * @return: 无，校准结果保存到Motor，Zero_ready表示是否成功
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+void Zero_Calibration(void);
 
 /***********************************************
  * @brief : 根据当前控制模式执行一次电机控制周期

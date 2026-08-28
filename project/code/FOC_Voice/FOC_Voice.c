@@ -315,36 +315,39 @@ static uint8 FOC_Voice_LoadNote(void)
 }
 
 /***********************************************
- * @brief : 计算当前音符的起音和释音包络
- * @param : 无
+ * @brief : 根据音符进度计算起音和释音包络
+ * @param : Note_elapsed 音符已执行控制周期数
+ * @param : Gate_count 音符有效发声控制周期数
  * @return: 音量包络，范围0~1
- * @date  : 2026-08-28
+ * @date  : 2026-08-29
  * @author: L
  ************************************************/
-static float FOC_Voice_GetEnvelope(void)
+static float FOC_Voice_GetEnvelope(
+    uint32 Note_elapsed,
+    uint32 Gate_count)
 {
     uint32 Release_start;
     float Envelope;
 
-    if ((Voice.Gate_count == 0u) ||
-        (Voice.Note_elapsed >= Voice.Gate_count))
+    if ((Gate_count == 0u) ||
+        (Note_elapsed >= Gate_count))
     {
         return 0.0f;
     }
 
     Envelope = 1.0f;
-    if (Voice.Note_elapsed < FOC_VOICE_RAMP_COUNT)
+    if (Note_elapsed < FOC_VOICE_RAMP_COUNT)
     {
         Envelope =
-            (float)Voice.Note_elapsed / (float)FOC_VOICE_RAMP_COUNT;
+            (float)Note_elapsed / (float)FOC_VOICE_RAMP_COUNT;
     }
 
-    Release_start = (Voice.Gate_count > FOC_VOICE_RAMP_COUNT) ?
-                    (Voice.Gate_count - FOC_VOICE_RAMP_COUNT) : 0u;
-    if (Voice.Note_elapsed > Release_start)
+    Release_start = (Gate_count > FOC_VOICE_RAMP_COUNT) ?
+                    (Gate_count - FOC_VOICE_RAMP_COUNT) : 0u;
+    if (Note_elapsed > Release_start)
     {
         Envelope = Float_Limit(
-            (float)(Voice.Gate_count - Voice.Note_elapsed) /
+            (float)(Gate_count - Note_elapsed) /
             (float)FOC_VOICE_RAMP_COUNT,
             0.0f,
             Envelope);
@@ -354,36 +357,112 @@ static float FOC_Voice_GetEnvelope(void)
 }
 
 /***********************************************
- * @brief : 将音频正弦信号转换为两相差分占空比
+ * @brief : 将音频正弦信号转换为指定相序的差分占空比
  * @param : Envelope 当前音量包络，范围0~1
+ * @param : Tone_phase 当前音频正弦相位
+ * @param : Phase 主发声相
  * @return: 无
- * @date  : 2026-08-28
+ * @date  : 2026-08-29
  * @author: L
  ************************************************/
-static void FOC_Voice_Output(float Envelope)
+static void FOC_Voice_Output(
+    float Envelope,
+    uint16 Tone_phase,
+    FOC_VoicePhase_t Phase)
 {
     uint16 DutyA;
     uint16 DutyB;
     uint16 DutyC;
+    int32 Neutral_duty;
     int32 Tone_duty;
 
+    Neutral_duty = (int32)(TCPWM_DUTY_MAX / 2u);
     Tone_duty = (int32)(
-        Envelope * fast_sinf(Voice.Tone_phase) *
+        Envelope * fast_sinf(Tone_phase) *
         (float)FOC_VOICE_DUTY_AMPLITUDE);
 
-    /* A、B两相反向变化形成线间音频电压，C相保持中点占空比。 */
-    DutyA = (uint16)Int_Limit(
-        (int32)(TCPWM_DUTY_MAX / 2u) + Tone_duty,
-        0,
-        (int32)TCPWM_DUTY_MAX);
-    DutyB = (uint16)Int_Limit(
-        (int32)(TCPWM_DUTY_MAX / 2u) - Tone_duty,
-        0,
-        (int32)TCPWM_DUTY_MAX);
-    DutyC = (uint16)(TCPWM_DUTY_MAX / 2u);
+    DutyA = (uint16)Neutral_duty;
+    DutyB = (uint16)Neutral_duty;
+    DutyC = (uint16)Neutral_duty;
+
+    switch (Phase)
+    {
+        case FOC_VOICE_PHASE_B:
+            DutyB = (uint16)Int_Limit(
+                Neutral_duty + Tone_duty,
+                0,
+                (int32)TCPWM_DUTY_MAX);
+            DutyC = (uint16)Int_Limit(
+                Neutral_duty - Tone_duty,
+                0,
+                (int32)TCPWM_DUTY_MAX);
+            break;
+
+        case FOC_VOICE_PHASE_C:
+            DutyC = (uint16)Int_Limit(
+                Neutral_duty + Tone_duty,
+                0,
+                (int32)TCPWM_DUTY_MAX);
+            DutyA = (uint16)Int_Limit(
+                Neutral_duty - Tone_duty,
+                0,
+                (int32)TCPWM_DUTY_MAX);
+            break;
+
+        case FOC_VOICE_PHASE_A:
+        default:
+            DutyA = (uint16)Int_Limit(
+                Neutral_duty + Tone_duty,
+                0,
+                (int32)TCPWM_DUTY_MAX);
+            DutyB = (uint16)Int_Limit(
+                Neutral_duty - Tone_duty,
+                0,
+                (int32)TCPWM_DUTY_MAX);
+            break;
+    }
 
     My_TCPWM_SetDuty(DutyA, DutyB, DutyC);
     SVPWM_DutyCache_Update(DutyA, DutyB, DutyC);
+}
+
+/* 阻塞播放一枚正弦包络音符。 */
+void FOC_Voice_PlayTone(
+    FOC_VoicePhase_t Phase,
+    FOC_VoicePitch_t Pitch,
+    uint16 Tone_ms,
+    uint16 Gap_ms)
+{
+    uint32 Irq_state;
+    uint32 Tone_count;
+    uint32 Gate_count;
+    uint32 Tone_index;
+    uint16 Tone_phase = 0u;
+    uint16 Tone_step;
+    float Envelope;
+
+    Tone_count =
+        (uint32)Tone_ms * FOC_VOICE_CONTROL_HZ / 1000u;
+    Gate_count = Tone_count * FOC_VOICE_GATE_PERCENT / 100u;
+    Tone_step = (uint16)(
+        ((uint32)Pitch * ANGLE_PERIOD +
+         (FOC_VOICE_CONTROL_HZ / 2u)) /
+        FOC_VOICE_CONTROL_HZ);
+
+    Irq_state = interrupt_global_disable();
+
+    for (Tone_index = 0u; Tone_index < Tone_count; Tone_index++)
+    {
+        Envelope = FOC_Voice_GetEnvelope(Tone_index, Gate_count);
+        FOC_Voice_Output(Envelope, Tone_phase, Phase);
+        Tone_phase = Angle_Wrap(
+            (int32)Tone_phase + (int32)Tone_step);
+        system_delay_us(1000000u / FOC_VOICE_CONTROL_HZ);
+    }
+
+    FOC_Voice_OutputNeutral();
+    interrupt_global_enable(Irq_state);
+    system_delay_ms(Gap_ms);
 }
 
 void FOC_Voice_Start(void)
@@ -474,8 +553,13 @@ void FOC_Voice_Loop(void)
         }
     }
 
-    Envelope = FOC_Voice_GetEnvelope();
-    FOC_Voice_Output(Envelope);
+    Envelope = FOC_Voice_GetEnvelope(
+        Voice.Note_elapsed,
+        Voice.Gate_count);
+    FOC_Voice_Output(
+        Envelope,
+        Voice.Tone_phase,
+        FOC_VOICE_PHASE_A);
 
     Voice.Tone_phase = Angle_Wrap(
         (int32)Voice.Tone_phase + (int32)Voice.Tone_step);

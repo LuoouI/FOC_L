@@ -481,6 +481,12 @@ static void FOC_Protocol_HandleFrame(const uint8 *Frame, uint16 Length)
     {
         FOC_Protocol_SendSongList();
     }
+    else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_ZERO_CAL) &&
+             (Payload_length == 0u))
+    {
+        FOC_Protocol_StopControl();
+        Zero_Calibration();
+    }
 }
 
 /***********************************************

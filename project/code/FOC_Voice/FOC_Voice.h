@@ -40,8 +40,21 @@ typedef enum
     FOC_VOICE_PITCH_FS5  = 740,                // F#5音符，频率约740 Hz
     FOC_VOICE_PITCH_G5   = 784,                // G5音符，频率约784 Hz
     FOC_VOICE_PITCH_GS5  = 831,                // G#5音符，频率约831 Hz
+    FOC_VOICE_PITCH_A5   = 880,                // A5音符，频率约880 Hz
+    FOC_VOICE_PITCH_B5   = 988,                // B5音符，频率约988 Hz
+    FOC_VOICE_PITCH_C6   = 1047,               // C6音符，频率约1047 Hz
     FOC_VOICE_PITCH_CS6  = 1109                // C#6音符，频率约1109 Hz
 } FOC_VoicePitch_t;
+
+/*===========================================================================*/
+/*  音符主发声相                                                              */
+/*===========================================================================*/
+typedef enum
+{
+    FOC_VOICE_PHASE_A = 0,                     // A相正向、B相反向输出
+    FOC_VOICE_PHASE_B,                         // B相正向、C相反向输出
+    FOC_VOICE_PHASE_C                          // C相正向、A相反向输出
+} FOC_VoicePhase_t;
 
 /*===========================================================================*/
 /*  单个音符描述                                                              */
@@ -89,6 +102,22 @@ typedef struct
     uint8 Song_id;                               // 当前乐曲编号
     uint8 Playing;                               // 正在播放标志
 } FOC_Voice_t;
+
+/***********************************************
+ * @brief : 阻塞播放一枚带正弦包络的音符，调用前应确保电机停止
+ * @param : Phase 主发声相
+ * @param : Pitch 音符频率
+ * @param : Tone_ms 音符持续时间，单位为ms
+ * @param : Gap_ms 音符结束后的静音时间，单位为ms
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+void FOC_Voice_PlayTone(
+    FOC_VoicePhase_t Phase,
+    FOC_VoicePitch_t Pitch,
+    uint16 Tone_ms,
+    uint16 Gap_ms);
 
 /***********************************************
  * @brief : 从头开始播放《奇迹再现》旋律

@@ -6,6 +6,7 @@
 #define FOC_PROTOCOL_VERSION              (1u)       // FOC-UART协议版本
 #define FOC_PROTOCOL_FRAME_TYPE_CONTROL   (0x10u)    // 电机控制命令帧
 #define FOC_PROTOCOL_FRAME_TYPE_SONG_LIST (0x14u)    // 内置乐曲列表查询和响应帧
+#define FOC_PROTOCOL_FRAME_TYPE_ZERO_CAL  (0x15u)    // 编码器零点校准命令帧
 #define FOC_PROTOCOL_FRAME_TYPE_TELEMETRY (0x20u)   // 基础遥测数据帧
 #define FOC_PROTOCOL_FRAME_TYPE_WAVEFORM  (0x21u)    // 高速波形采样帧
 #define FOC_PROTOCOL_CONTROL_LENGTH       (16u)      // 控制命令负载长度
