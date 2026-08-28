@@ -4,23 +4,7 @@
 #include "Motor_Control/Motor_Control.h"
 #include "SVPWM/SVPWM.h"
 
-static FOC_ProtocolParser_t Protocol_parser;
-static volatile uint32 Protocol_timeMs = 0u;
-static uint32 Protocol_lastControlMs = 0u;
-static uint32 Protocol_voiceSession = 0u;
-static uint8 Protocol_controlSeen = 0u;
-static uint8 Protocol_enabled = 0u;
-static uint8 Protocol_songId = 0u;
-static uint8 Protocol_voiceSelected = 0u;
-static uint16 Protocol_startAngle = 0u;
-static uint32 Protocol_lastTelemetryMs = 0u;
-static uint32 Protocol_lastWaveformMs = 0u;
-static uint16 Protocol_txSequence = 0u;
-
-static const float Protocol_uqLimit = 60.0f;
-static const uint32 Protocol_telemetryPeriodMs = 25u;
-static const uint32 Protocol_waveformPeriodMs = 10u;
-static const float Protocol_controlHz = 20000.0f;
+static FOC_Protocol_t Protocol;
 
 /***********************************************
  * @brief : 读取小端序16位无符号整数
@@ -156,8 +140,8 @@ static void FOC_Protocol_StopControl(void)
     Motor.Open_loop.Step = 0;
     Motor.Open_loop.Hold_count = 0u;
     Motor.Open_loop.Started = 0u;
-    Protocol_enabled = 0u;
-    Protocol_voiceSelected = 0u;
+    Protocol.Enabled = 0u;
+    Protocol.Voice_selected = 0u;
 }
 
 /***********************************************
@@ -188,12 +172,14 @@ static void FOC_Protocol_HandleOpenLoop(const uint8 *Payload)
         return;
     }
 
-    if (Protocol_voiceSelected != 0u)
+    if (Protocol.Voice_selected != 0u)
     {
         FOC_Voice_Stop();
     }
 
-    Uq_target = Float_Limit(Uq_target, -Protocol_uqLimit, Protocol_uqLimit);
+    Uq_target = Float_Limit(Uq_target,
+                            -FOC_PROTOCOL_UQ_LIMIT,
+                            FOC_PROTOCOL_UQ_LIMIT);
     Start_angle_value = (Start_angle_target >= 0.0f) ?
                         (int32)(Start_angle_target + 0.5f) :
                         (int32)(Start_angle_target - 0.5f);
@@ -207,13 +193,13 @@ static void FOC_Protocol_HandleOpenLoop(const uint8 *Payload)
     Step_value *= (int32)Direction;
     Step_value = Int_Limit(Step_value, -32768, 32767);
 
-    Need_start = ((Protocol_enabled == 0u) ||
-                  (Protocol_startAngle != Start_angle) ||
+    Need_start = ((Protocol.Enabled == 0u) ||
+                  (Protocol.Start_angle != Start_angle) ||
                   (Motor.Open_loop.Started == 0u)) ? 1u : 0u;
 
-    Protocol_enabled = 1u;
-    Protocol_voiceSelected = 0u;
-    Protocol_startAngle = Start_angle;
+    Protocol.Enabled = 1u;
+    Protocol.Voice_selected = 0u;
+    Protocol.Start_angle = Start_angle;
     Motor.Control_mode = MOTOR_CONTROL_OPEN_LOOP;
     Motor.Open_loop.Uq = Uq_target;
     Motor.Open_loop.Step = (int16)Step_value;
@@ -245,15 +231,15 @@ static void FOC_Protocol_HandleVoice(const uint8 *Payload)
         return;
     }
 
-    Need_start = ((Protocol_enabled == 0u) ||
-                  (Protocol_voiceSelected == 0u) ||
-                  (Protocol_songId != Song_id) ||
-                  (Protocol_voiceSession != Session)) ? 1u : 0u;
+    Need_start = ((Protocol.Enabled == 0u) ||
+                  (Protocol.Voice_selected == 0u) ||
+                  (Protocol.Song_id != Song_id) ||
+                  (Protocol.Voice_session != Session)) ? 1u : 0u;
 
-    Protocol_enabled = 1u;
-    Protocol_voiceSelected = 1u;
-    Protocol_songId = Song_id;
-    Protocol_voiceSession = Session;
+    Protocol.Enabled = 1u;
+    Protocol.Voice_selected = 1u;
+    Protocol.Song_id = Song_id;
+    Protocol.Voice_session = Session;
 
     if ((Need_start != 0u) && (FOC_Voice_StartSong(Song_id) == 0u))
     {
@@ -275,8 +261,8 @@ static void FOC_Protocol_HandleControl(const uint8 *Payload)
     uint8 Enable = (uint8)(Flags & 0x01u);
     uint8 Emergency = (uint8)(Flags & 0x04u);
 
-    Protocol_controlSeen = 1u;
-    Protocol_lastControlMs = Protocol_timeMs;
+    Protocol.Control_seen = 1u;
+    Protocol.Last_control_ms = Protocol.Time_ms;
 
     if ((Emergency != 0u) || (Enable == 0u))
     {
@@ -319,7 +305,7 @@ static void FOC_Protocol_SendTelemetry(void)
     Frame[1] = 0x55u;
     Frame[2] = FOC_PROTOCOL_VERSION;
     Frame[3] = FOC_PROTOCOL_FRAME_TYPE_TELEMETRY;
-    FOC_Protocol_WriteU16(&Frame[4], Protocol_txSequence++);
+    FOC_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
     FOC_Protocol_WriteU16(&Frame[6], FOC_PROTOCOL_TELEMETRY_LENGTH);
 
     if (Motor.Pole_pairs == 0u)
@@ -329,7 +315,7 @@ static void FOC_Protocol_SendTelemetry(void)
     else
     {
         Speed_target = (float)Motor.Open_loop.Step *
-                       Protocol_controlHz * 60.0f /
+                       FOC_PROTOCOL_CONTROL_HZ * 60.0f /
                        ((float)ANGLE_PERIOD * (float)Motor.Pole_pairs);
     }
     Mechanical_angle = (float)Motor.Encoder.Mechanical_angle *
@@ -337,15 +323,15 @@ static void FOC_Protocol_SendTelemetry(void)
     Electrical_angle = (float)Motor.Encoder.Electrical_angle *
                        360.0f / (float)ANGLE_PERIOD;
 
-    Payload[0] = (Protocol_enabled != 0u) ? 1u : 0u;
+    Payload[0] = (Protocol.Enabled != 0u) ? 1u : 0u;
     Payload[1] = (uint8)Motor.Control_mode;
     Payload[2] = 0u;
     Payload[3] = (Current.calibrated != 0u) ? 0x02u : 0u;
-    if (Protocol_enabled != 0u)
+    if (Protocol.Enabled != 0u)
     {
         Payload[3] |= 0x01u;
     }
-    FOC_Protocol_WriteU32(&Payload[4], Protocol_timeMs);
+    FOC_Protocol_WriteU32(&Payload[4], Protocol.Time_ms);
     FOC_Protocol_WriteFloat(&Payload[8], Speed_target);
     FOC_Protocol_WriteFloat(&Payload[12], Motor.Encoder.Spd_rpm);
     FOC_Protocol_WriteFloat(&Payload[16], 0.0f);
@@ -381,10 +367,10 @@ static void FOC_Protocol_SendWaveform(void)
     Frame[1] = 0x55u;
     Frame[2] = FOC_PROTOCOL_VERSION;
     Frame[3] = FOC_PROTOCOL_FRAME_TYPE_WAVEFORM;
-    FOC_Protocol_WriteU16(&Frame[4], Protocol_txSequence++);
+    FOC_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
     FOC_Protocol_WriteU16(&Frame[6], FOC_PROTOCOL_WAVEFORM_LENGTH);
 
-    FOC_Protocol_WriteU32(&Payload[0], Protocol_timeMs);
+    FOC_Protocol_WriteU32(&Payload[0], Protocol.Time_ms);
     FOC_Protocol_WriteFloat(&Payload[4], Current.current_u);
     FOC_Protocol_WriteFloat(&Payload[8], Current.current_v);
     FOC_Protocol_WriteFloat(&Payload[12], Current.current_w);
@@ -445,69 +431,57 @@ static void FOC_Protocol_ParseByte(uint8 Data)
 {
     uint16 Payload_length;
 
-    if (Protocol_parser.Length == 0u)
+    if (Protocol.Parser.Length == 0u)
     {
         if (Data == 0xaau)
         {
-            Protocol_parser.Data[0] = Data;
-            Protocol_parser.Length = 1u;
+            Protocol.Parser.Data[0] = Data;
+            Protocol.Parser.Length = 1u;
         }
         return;
     }
 
-    if (Protocol_parser.Length == 1u)
+    if (Protocol.Parser.Length == 1u)
     {
         if (Data == 0x55u)
         {
-            Protocol_parser.Data[1] = Data;
-            Protocol_parser.Length = 2u;
+            Protocol.Parser.Data[1] = Data;
+            Protocol.Parser.Length = 2u;
         }
         else if (Data != 0xaau)
         {
-            Protocol_parser.Length = 0u;
+            Protocol.Parser.Length = 0u;
         }
         return;
     }
 
-    Protocol_parser.Data[Protocol_parser.Length] = Data;
-    Protocol_parser.Length++;
+    Protocol.Parser.Data[Protocol.Parser.Length] = Data;
+    Protocol.Parser.Length++;
 
-    if (Protocol_parser.Length == 8u)
+    if (Protocol.Parser.Length == 8u)
     {
-        Payload_length = FOC_Protocol_ReadU16(&Protocol_parser.Data[6]);
-        Protocol_parser.Expected_length = (uint16)(Payload_length + 10u);
-        if (Protocol_parser.Expected_length > FOC_PROTOCOL_FRAME_MAX)
+        Payload_length = FOC_Protocol_ReadU16(&Protocol.Parser.Data[6]);
+        Protocol.Parser.Expected_length = (uint16)(Payload_length + 10u);
+        if (Protocol.Parser.Expected_length > FOC_PROTOCOL_FRAME_MAX)
         {
-            Protocol_parser.Length = 0u;
-            Protocol_parser.Expected_length = 0u;
+            Protocol.Parser.Length = 0u;
+            Protocol.Parser.Expected_length = 0u;
         }
     }
 
-    if ((Protocol_parser.Expected_length != 0u) &&
-        (Protocol_parser.Length >= Protocol_parser.Expected_length))
+    if ((Protocol.Parser.Expected_length != 0u) &&
+        (Protocol.Parser.Length >= Protocol.Parser.Expected_length))
     {
-        FOC_Protocol_HandleFrame(Protocol_parser.Data,
-                                 Protocol_parser.Expected_length);
-        Protocol_parser.Length = 0u;
-        Protocol_parser.Expected_length = 0u;
+        FOC_Protocol_HandleFrame(Protocol.Parser.Data,
+                                 Protocol.Parser.Expected_length);
+        Protocol.Parser.Length = 0u;
+        Protocol.Parser.Expected_length = 0u;
     }
 }
 
 void FOC_Protocol_Init(void)
 {
-    Protocol_parser.Length = 0u;
-    Protocol_parser.Expected_length = 0u;
-    Protocol_timeMs = 0u;
-    Protocol_lastControlMs = 0u;
-    Protocol_voiceSession = 0u;
-    Protocol_controlSeen = 0u;
-    Protocol_enabled = 0u;
-    Protocol_songId = 0u;
-    Protocol_voiceSelected = 0u;
-    Protocol_startAngle = 0u;
-    Protocol_lastTelemetryMs = 0u;
-    Protocol_lastWaveformMs = 0u;
-    Protocol_txSequence = 0u;
+    memset(&Protocol, 0, sizeof(Protocol));
 }
 
 void FOC_Protocol_Service(void)
@@ -529,34 +503,34 @@ void FOC_Protocol_Service(void)
     }
     while (Receive_length != 0u);
 
-    Current_ms = Protocol_timeMs;
+    Current_ms = Protocol.Time_ms;
 
-    if ((Protocol_controlSeen != 0u) &&
-        ((uint32)(Current_ms - Protocol_lastControlMs) >
+    if ((Protocol.Control_seen != 0u) &&
+        ((uint32)(Current_ms - Protocol.Last_control_ms) >
          FOC_PROTOCOL_TIMEOUT_MS))
     {
         FOC_Protocol_StopControl();
-        Protocol_controlSeen = 0u;
+        Protocol.Control_seen = 0u;
     }
 
-    if ((Protocol_controlSeen != 0u) &&
-        ((uint32)(Current_ms - Protocol_lastTelemetryMs) >=
-         Protocol_telemetryPeriodMs))
+    if ((Protocol.Control_seen != 0u) &&
+        ((uint32)(Current_ms - Protocol.Last_telemetry_ms) >=
+         FOC_PROTOCOL_TELEMETRY_PERIOD_MS))
     {
-        Protocol_lastTelemetryMs = Current_ms;
+        Protocol.Last_telemetry_ms = Current_ms;
         FOC_Protocol_SendTelemetry();
     }
 
-    if ((Protocol_controlSeen != 0u) &&
-        ((uint32)(Current_ms - Protocol_lastWaveformMs) >=
-         Protocol_waveformPeriodMs))
+    if ((Protocol.Control_seen != 0u) &&
+        ((uint32)(Current_ms - Protocol.Last_waveform_ms) >=
+         FOC_PROTOCOL_WAVEFORM_PERIOD_MS))
     {
-        Protocol_lastWaveformMs = Current_ms;
+        Protocol.Last_waveform_ms = Current_ms;
         FOC_Protocol_SendWaveform();
     }
 }
 
 void FOC_Protocol_Tick1ms(void)
 {
-    Protocol_timeMs++;
+    Protocol.Time_ms++;
 }
