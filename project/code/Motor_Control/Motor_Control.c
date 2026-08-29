@@ -8,12 +8,6 @@
 #include "SVPWM/SVPWM.h"
 #include <math.h>
 
-static const ABFilterParam_t RpmFltCfg =
-{
-    .Ts = 0.001f,
-    .Bw = 100.0f
-};
-
 const Motor_ZeroCalib_t Motor_zeroCalib =
 {
     .Voltage = 2.0f,
@@ -54,122 +48,27 @@ Foc_motor_t Motor =
     },
     .Current_loop =
     {
-        .Id_target = 0.0f,
-        .Iq_target = 0.0f,
-        .Bandwidth = 1000u,
-        .Ud_output = 0.0f,
-        .Uq_output = 0.0f,
-        .Id_pid =
-        {
-            .Kp = 0.0f,
-            .Ki = 0.0f,
-            .Kd = 0.0f,
-            .Tau = MOTOR_CURRENT_LOOP_TS,
-            .T = MOTOR_CURRENT_LOOP_TS,
-            .LimMin = -FLT_MAX,
-            .LimMax = FLT_MAX,
-            .LimMinInt = -FLT_MAX,
-            .LimMaxInt = FLT_MAX,
-            .Ek = 0.0f,
-            .last_Ek = 0.0f,
-            .Ek_sum = 0.0f,
-            .Integrator = 0.0f,
-            .PrevMeasurement = 0.0f,
-            .Differentiator = 0.0f,
-            .P_Out = 0.0f,
-            .I_Out = 0.0f,
-            .D_Out = 0.0f,
-            .OUT = 0.0f
-        },
-        .Iq_pid =
-        {
-            .Kp = 0.0f,
-            .Ki = 0.0f,
-            .Kd = 0.0f,
-            .Tau = MOTOR_CURRENT_LOOP_TS,
-            .T = MOTOR_CURRENT_LOOP_TS,
-            .LimMin = -FLT_MAX,
-            .LimMax = FLT_MAX,
-            .LimMinInt = -FLT_MAX,
-            .LimMaxInt = FLT_MAX,
-            .Ek = 0.0f,
-            .last_Ek = 0.0f,
-            .Ek_sum = 0.0f,
-            .Integrator = 0.0f,
-            .PrevMeasurement = 0.0f,
-            .Differentiator = 0.0f,
-            .P_Out = 0.0f,
-            .I_Out = 0.0f,
-            .D_Out = 0.0f,
-            .OUT = 0.0f
-        }
+        .Bandwidth = 1000u
     },
     .Speed_loop =
     {
-        .Target_rpm = 0.0f,
+        .Ramp_rate = 2000.0f,
         .Pid =
         {
-            .Kp = 0.0f,
-            .Ki = 0.0f,
-            .Kd = 0.0f,
-            .Tau = MOTOR_SPEED_LOOP_TS,
-            .T = MOTOR_SPEED_LOOP_TS,
-            .LimMin = 0.0f,
-            .LimMax = 0.0f,
-            .LimMinInt = 0.0f,
-            .LimMaxInt = 0.0f,
-            .Ek = 0.0f,
-            .last_Ek = 0.0f,
-            .Ek_sum = 0.0f,
-            .Integrator = 0.0f,
-            .PrevMeasurement = 0.0f,
-            .Differentiator = 0.0f,
-            .P_Out = 0.0f,
-            .I_Out = 0.0f,
-            .D_Out = 0.0f,
-            .OUT = 0.0f
+            .Kp = 0.01f,
+            .Ki = 0.0044,
         },
-        .Iq_output = 0.0f
+        .Integral_limit = 1.0f
     },
     .Position_loop =
     {
-        .Target_degree = 0.0f,
         .Pid =
         {
-            .Kp = 0.0f,
-            .Ki = 0.0f,
-            .Kd = 0.0f,
-            .Tau = MOTOR_POSITION_LOOP_TS,
-            .T = MOTOR_POSITION_LOOP_TS,
-            .LimMin = 0.0f,
-            .LimMax = 0.0f,
-            .LimMinInt = 0.0f,
-            .LimMaxInt = 0.0f,
-            .Ek = 0.0f,
-            .last_Ek = 0.0f,
-            .Ek_sum = 0.0f,
-            .Integrator = 0.0f,
-            .PrevMeasurement = 0.0f,
-            .Differentiator = 0.0f,
-            .P_Out = 0.0f,
-            .I_Out = 0.0f,
-            .D_Out = 0.0f,
-            .OUT = 0.0f
+            .Kp = 0.0f
         },
-        .Speed_output = 0.0f
+        .Deadband_degree = 0.0f
     },
-    .Loop_parameters =
-    {
-        .Current_bandwidth = 1000u,
-        .Speed_kp = 0.0f,
-        .Speed_ki = 0.0f,
-        .Speed_integral_limit = 0.0f,
-        .Speed_output_limit = 0.0f,
-        .Position_kp = 0.0f,
-        .Position_ki = 0.0f,
-        .Position_integral_limit = 0.0f,
-        .Position_output_limit = 0.0f
-    },
+    .Ab_filter_bandwidth = 50.0f,
     .Pole_pairs = 7u,
     .Control_mode = MOTOR_CONTROL_OPEN_LOOP,
     .Foc_mode = MOTOR_FOC_CURRENT,
@@ -180,6 +79,85 @@ Foc_motor_t Motor =
 /*===========================================================================*/
 /*  前期准备                                                                  */
 /*===========================================================================*/
+
+/***********************************************
+ * @brief : 按给定变化率将当前转速目标平滑逼近命令转速
+ * @param : Command_rpm 上位机下发的原始速度目标，单位为rpm
+ * @param : Target_rpm 当前斜坡输出，单位为rpm
+ * @param : Ramp_rate 速度斜坡速率，单位为rpm/s
+ * @return: 本周期更新后的速度目标，单位为rpm
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static float Speed_Ramp(float Command_rpm,
+                        float Target_rpm,
+                        float Ramp_rate)
+{
+    float Ramp_step;
+    float Speed_error;
+
+    if ((Command_rpm != Command_rpm) ||
+        (Target_rpm != Target_rpm))
+    {
+        return 0.0f;
+    }
+
+    if ((Ramp_rate != Ramp_rate) || (Ramp_rate <= 0.0f))
+    {
+        return Target_rpm;
+    }
+
+    Ramp_step = Ramp_rate * MOTOR_SPEED_LOOP_TS;
+    Speed_error = Command_rpm - Target_rpm;
+    if (Speed_error > Ramp_step)
+    {
+        Target_rpm += Ramp_step;
+    }
+    else if (Speed_error < -Ramp_step)
+    {
+        Target_rpm -= Ramp_step;
+    }
+    else
+    {
+        Target_rpm = Command_rpm;
+    }
+
+    return Target_rpm;
+}
+
+/***********************************************
+ * @brief : 根据旋转方向计算位置环单向角度误差
+ * @param : Target_degree 目标机械角度，单位为度
+ * @param : Mechanical_degree 当前机械角度，范围0~360度
+ * @param : Direction 位置运动方向，取值为+1或-1
+ * @return: 按指定方向到达目标所需的角度误差，单位为度
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
+static float Position_ErrorByDirection(float Target_degree,
+                                       float Mechanical_degree,
+                                       int8 Direction)
+{
+    float Error_degree;
+
+    Error_degree = Target_degree - Mechanical_degree;
+    if (Direction >= 0)
+    {
+        while (Error_degree < 0.0f)
+        {
+            Error_degree += 360.0f;
+        }
+    }
+    else
+    {
+        while (Error_degree > 0.0f)
+        {
+            Error_degree -= 360.0f;
+        }
+    }
+
+    return Error_degree;
+}
 
 void Angle_Update(void)
 {
@@ -200,13 +178,17 @@ void Angle_Update(void)
 void RPM_Cal(void)
 {
     static uint8 FltReady = 0u;
+    ABFilterParam_t RpmFltCfg;
     int32 MechAng;
     uint16 WrapAng;
     float MeasAng;
     float Omega;
 
-    if (FltReady == 0u)
+    if ((FltReady == 0u) ||
+        (Angle.Param.Bw_hz != Motor.Ab_filter_bandwidth))
     {
+        RpmFltCfg.Ts = MOTOR_SPEED_LOOP_TS;
+        RpmFltCfg.Bw_hz = Motor.Ab_filter_bandwidth;
         ABFilter_Init(&Angle, &RpmFltCfg);
         FltReady = 1u;
     }
@@ -666,6 +648,60 @@ static void Current_VectorLimit(float *IdValue,
 }
 
 /***********************************************
+ * @brief : 根据d轴电流目标计算q轴可用电流幅值
+ * @param : IdTarget d轴电流目标，单位为A
+ * @param : Limit d/q轴电流矢量幅值上限，单位为A
+ * @return: q轴可用电流幅值，单位为A
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static float Current_GetIqLimit(float IdTarget, float Limit)
+{
+    float Id_abs;
+
+    if ((IdTarget != IdTarget) ||
+        (Limit != Limit) ||
+        (Limit <= 0.0f))
+    {
+        return 0.0f;
+    }
+
+    Id_abs = fabsf(IdTarget);
+    if (Id_abs >= Limit)
+    {
+        return 0.0f;
+    }
+
+    return sqrtf((Limit * Limit) - (IdTarget * IdTarget));
+}
+
+/***********************************************
+ * @brief : 在编码器零点无效时关闭全部有感FOC输出
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static void EncoderFoc_StopOutput(void)
+{
+    Motor.Control_mode = MOTOR_CONTROL_OPEN_LOOP;
+    Motor.Open_loop.Uq = 0.0f;
+    Motor.Open_loop.Step = 0;
+    Motor.Current_loop.Id_target = 0.0f;
+    Motor.Current_loop.Iq_target = 0.0f;
+    Motor.Speed_loop.Command_rpm = 0.0f;
+    Motor.Speed_loop.Target_rpm = 0.0f;
+    Motor.Speed_loop.Iq_output = 0.0f;
+    Motor.Position_loop.Target_degree = 0.0f;
+    Motor.Position_loop.Speed_output = 0.0f;
+    PID_Clear(&Motor.Current_loop.Id_pid);
+    PID_Clear(&Motor.Current_loop.Iq_pid);
+    PID_Clear(&Motor.Speed_loop.Pid);
+    PID_Clear(&Motor.Position_loop.Pid);
+    Motor_openloop_set(0.0f, 0.0f, 0);
+}
+
+/***********************************************
  * @brief : 执行d/q轴电流PI控制并将SVPWM饱和误差反算给积分器
  * @param : 无
  * @return: 无
@@ -736,10 +772,40 @@ static void Current_Loop(void)
  ************************************************/
 static void Speed_Loop(void)
 {
-    Motor.Speed_loop.Iq_output = PID_Update(
+    float Iq_limit;
+    float Integral_limit;
+    float Iq_request;
+
+    if (Motor.Foc_mode == MOTOR_FOC_SPEED)
+    {
+        Motor.Speed_loop.Target_rpm = Speed_Ramp(
+            Motor.Speed_loop.Command_rpm,
+            Motor.Speed_loop.Target_rpm,
+            Motor.Speed_loop.Ramp_rate);
+    }
+
+    Iq_limit = Current_GetIqLimit(
+        Motor.Current_loop.Id_target,
+        MOTOR_CURRENT_VECTOR_LIMIT_A);
+
+    Integral_limit = Motor.Speed_loop.Integral_limit;
+    if (Integral_limit > Iq_limit)
+    {
+        Integral_limit = Iq_limit;
+    }
+    PID_SetIntegralLimit(&Motor.Speed_loop.Pid, Integral_limit);
+
+    Iq_request = PID_Update(
         &Motor.Speed_loop.Pid,
         Motor.Speed_loop.Target_rpm,
         Motor.Encoder.Spd_rpm);
+    Motor.Speed_loop.Iq_output = Float_Limit(
+        Iq_request,
+        -Iq_limit,
+        Iq_limit);
+    PID_BackCalculation(
+        &Motor.Speed_loop.Pid,
+        Motor.Speed_loop.Iq_output);
     Motor.Current_loop.Iq_target = Motor.Speed_loop.Iq_output;
 }
 
@@ -752,16 +818,35 @@ static void Speed_Loop(void)
  ************************************************/
 static void Position_Loop(void)
 {
+    int32 Mechanical_count;
     float Mechanical_degree;
+    float Position_error;
 
-    Mechanical_degree = (float)Motor.Encoder.Mechanical_angle *
+    /* 位置环使用扣除零偏、修正方向后的机械角，统一映射到0~360度。 */
+    Mechanical_count =
+        ((int32)Motor.Encoder.Mechanical_angle -
+         (int32)Motor.Encoder.Zero_offset) *
+        (int32)Motor.Encoder.Direction;
+    Mechanical_count = (int32)Angle_Wrap(Mechanical_count);
+    Mechanical_degree = (float)Mechanical_count *
                         360.0f / (float)ANGLE_PERIOD;
+    Position_error = Position_ErrorByDirection(
+        Motor.Position_loop.Target_degree,
+        Mechanical_degree,
+        Motor.Foc_direction);
+    if (fabsf(Position_error) <= Motor.Position_loop.Deadband_degree)
+    {
+        Motor.Position_loop.Speed_output = 0.0f;
+        Motor.Speed_loop.Target_rpm = 0.0f;
+        PID_Clear(&Motor.Position_loop.Pid);
+        return;
+    }
+
     Motor.Position_loop.Speed_output = PID_Update(
         &Motor.Position_loop.Pid,
-        Motor.Position_loop.Target_degree,
-        Mechanical_degree);
-    Motor.Speed_loop.Target_rpm = Motor.Position_loop.Speed_output *
-                                  (float)Motor.Foc_direction;
+        Position_error,
+        0.0f);
+    Motor.Speed_loop.Target_rpm = Motor.Position_loop.Speed_output;
 }
 
 void Motor_Control_SetCurrentBandwidth(uint16 BandwidthHz)
@@ -797,23 +882,13 @@ void Motor_Control_SetCurrentBandwidth(uint16 BandwidthHz)
         LQ,
         RS);
     Motor.Current_loop.Bandwidth = BandwidthHz;
-    Motor.Loop_parameters.Current_bandwidth = BandwidthHz;
 }
 
-void Motor_Control_SetLoopParameters(const Motor_LoopParameters_t *Parameters)
+void Motor_Control_Init(void)
 {
     float Voltage_limit;
-    float Speed_integral_limit;
-    float Speed_output_limit;
-    float Position_integral_limit;
-    float Position_output_limit;
 
-    if (Parameters == NULL)
-    {
-        return;
-    }
-
-    Motor_Control_SetCurrentBandwidth(Parameters->Current_bandwidth);
+    Motor_Control_SetCurrentBandwidth(Motor.Current_loop.Bandwidth);
 
     Voltage_limit = SVPWM.DQ_Limit;
     if ((Voltage_limit != Voltage_limit) || (Voltage_limit < 0.0f))
@@ -837,58 +912,71 @@ void Motor_Control_SetLoopParameters(const Motor_LoopParameters_t *Parameters)
         -Voltage_limit,
         Voltage_limit);
 
-    Speed_integral_limit = Parameters->Speed_integral_limit;
-    if (Speed_integral_limit < 0.0f)
+    Motor_Control_SetSpeedPi(
+        Motor.Speed_loop.Pid.Kp,
+        Motor.Speed_loop.Pid.Ki,
+        Motor.Speed_loop.Integral_limit);
+    Motor_Control_SetPositionKp(
+        Motor.Position_loop.Pid.Kp,
+        Motor.Position_loop.Pid.LimMax,
+        Motor.Position_loop.Deadband_degree);
+}
+
+void Motor_Control_SetSpeedPi(float Kp,
+                              float Ki,
+                              float IntegralLimit)
+{
+    if (IntegralLimit < 0.0f)
     {
-        Speed_integral_limit = -Speed_integral_limit;
+        IntegralLimit = -IntegralLimit;
     }
-    Speed_output_limit = Parameters->Speed_output_limit;
-    if (Speed_output_limit < 0.0f)
+    if (IntegralLimit > MOTOR_CURRENT_VECTOR_LIMIT_A)
     {
-        Speed_output_limit = -Speed_output_limit;
+        IntegralLimit = MOTOR_CURRENT_VECTOR_LIMIT_A;
     }
+
+    /* 保留速度PI原始输出，由速度环按实时Iq能力限幅后进行反算。 */
     PID_Config(
         &Motor.Speed_loop.Pid,
         MOTOR_SPEED_LOOP_TS,
         MOTOR_SPEED_LOOP_TS,
-        -Speed_output_limit,
-        Speed_output_limit,
-        -Speed_integral_limit,
-        Speed_integral_limit);
-    Motor.Speed_loop.Pid.Kp = Parameters->Speed_kp;
-    Motor.Speed_loop.Pid.Ki = Parameters->Speed_ki;
+        -FLT_MAX,
+        FLT_MAX,
+        -IntegralLimit,
+        IntegralLimit);
+    Motor.Speed_loop.Pid.Kp = Kp;
+    Motor.Speed_loop.Pid.Ki = Ki;
+    Motor.Speed_loop.Integral_limit = IntegralLimit;
+}
 
-    Position_integral_limit = Parameters->Position_integral_limit;
-    if (Position_integral_limit < 0.0f)
+void Motor_Control_SetPositionKp(float Kp,
+                                 float OutputLimit,
+                                 float Deadband_degree)
+{
+    if (OutputLimit < 0.0f)
     {
-        Position_integral_limit = -Position_integral_limit;
+        OutputLimit = -OutputLimit;
     }
-    Position_output_limit = Parameters->Position_output_limit;
-    if (Position_output_limit < 0.0f)
+    if ((Deadband_degree != Deadband_degree) ||
+        (Deadband_degree < 0.0f))
     {
-        Position_output_limit = -Position_output_limit;
+        Deadband_degree = 0.0f;
+    }
+    if (Deadband_degree > 180.0f)
+    {
+        Deadband_degree = 180.0f;
     }
     PID_Config(
         &Motor.Position_loop.Pid,
         MOTOR_POSITION_LOOP_TS,
         MOTOR_POSITION_LOOP_TS,
-        -Position_output_limit,
-        Position_output_limit,
-        -Position_integral_limit,
-        Position_integral_limit);
-    Motor.Position_loop.Pid.Kp = Parameters->Position_kp;
-    Motor.Position_loop.Pid.Ki = Parameters->Position_ki;
-    Motor.Loop_parameters = *Parameters;
-}
-
-void Motor_Control_GetLoopParameters(Motor_LoopParameters_t *Parameters)
-{
-    if (Parameters == NULL)
-    {
-        return;
-    }
-
-    *Parameters = Motor.Loop_parameters;
+        -OutputLimit,
+        OutputLimit,
+        0.0f,
+        0.0f);
+    Motor.Position_loop.Pid.Kp = Kp;
+    Motor.Position_loop.Pid.Ki = 0.0f;
+    Motor.Position_loop.Deadband_degree = Deadband_degree;
 }
 
 /*===========================================================================*/
@@ -908,6 +996,12 @@ void Motor_Control_Loop(void)
     {
         Speed_count = 0u;
         Position_count = 0u;
+        if ((Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC) &&
+            (Motor.Foc_mode == MOTOR_FOC_SPEED))
+        {
+            Motor.Speed_loop.Target_rpm = Motor.Encoder.Spd_rpm;
+            PID_Clear(&Motor.Speed_loop.Pid);
+        }
     }
 
     switch (Motor.Control_mode)
@@ -920,6 +1014,14 @@ void Motor_Control_Loop(void)
             break;
 
         case MOTOR_CONTROL_ENCODER_FOC:
+            if (Motor.Zero_ready == 0u)
+            {
+                EncoderFoc_StopOutput();
+                Speed_count = 0u;
+                Position_count = 0u;
+                break;
+            }
+
             if (Motor.Foc_mode == MOTOR_FOC_POSITION)
             {
                 if (Position_count == 0u)

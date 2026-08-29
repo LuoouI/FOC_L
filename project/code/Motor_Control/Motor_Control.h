@@ -19,7 +19,9 @@
     (1.0f / (float)MOTOR_SPEED_LOOP_HZ)            // 速度环采样周期，单位为秒
 #define MOTOR_POSITION_LOOP_TS          \
     (1.0f / (float)MOTOR_POSITION_LOOP_HZ)         // 位置环采样周期，单位为秒
-#define MOTOR_CURRENT_VECTOR_LIMIT_A    (5.0f)      // d/q轴电流矢量固定限幅，单位为A
+#define MOTOR_CURRENT_VECTOR_LIMIT_A    (10.0f)      // d/q轴电流矢量固定限幅，单位为A
+#define MOTOR_AB_FILTER_BW_MIN_HZ        (1.0f)      // AB滤波器带宽下限，单位为Hz
+#define MOTOR_AB_FILTER_BW_MAX_HZ        (500.0f)    // AB滤波器带宽上限，单位为Hz
 
 /*===========================================================================*/
 /*  电机零点校准参数                                                          */
@@ -67,9 +69,9 @@ typedef struct
     menc15a_module_enum Sensor_id;              // 编码器模块编号
     int8 Direction;                             // 编码器方向，取值为+1或-1
     uint16 Zero_offset;                         // 机械角零偏
-    uint16 Mechanical_angle;           // 机械角，范围0~32767
+    uint16 Mechanical_angle;                    // 机械角，范围0~32767
     uint16 Electrical_angle;                    // 电角度，范围0~32767
-    float Spd_rpm;                     // 滤波后的机械转速，单位为转/分钟
+    float Spd_rpm;                              // 滤波后的机械转速，单位为转/分钟
 } Motor_Encoder_t;
 
 /*===========================================================================*/
@@ -113,8 +115,11 @@ typedef struct
 /*===========================================================================*/
 typedef struct
 {
-    float Target_rpm;                           // 速度目标，单位为rpm
-    PID_t Pid;                                  // 速度调节器，输出为Iq目标
+    float Command_rpm;                          // 上位机下发的原始速度目标，单位为rpm
+    float Target_rpm;                           // 斜坡处理后的速度目标，单位为rpm
+    float Ramp_rate;                            // 速度斜坡速率，单位为rpm/s
+    PID_t Pid;                                  // 速度调节器，原始输出由速度环按Iq能力限幅
+    float Integral_limit;                       // 速度环积分项配置限幅，单位为A
     float Iq_output;                            // 速度环输出，单位为A
 } Foc_SpeedLoop_t;
 
@@ -126,23 +131,8 @@ typedef struct
     float Target_degree;                        // 位置目标，单位为度
     PID_t Pid;                                  // 位置调节器，输出为速度目标
     float Speed_output;                         // 位置环输出，单位为rpm
+    float Deadband_degree;                      // 位置角度死区，单位为度
 } Foc_PositionLoop_t;
-
-/*===========================================================================*/
-/*  FOC环路参数                                                               */
-/*===========================================================================*/
-typedef struct
-{
-    uint16 Current_bandwidth;                   // 电流环带宽，单位为Hz
-    float Speed_kp;                              // 速度环比例增益
-    float Speed_ki;                              // 速度环积分增益
-    float Speed_integral_limit;                  // 速度环积分项限幅，单位为A
-    float Speed_output_limit;                   // 速度环输出限幅，单位为A
-    float Position_kp;                           // 位置环比例增益
-    float Position_ki;                           // 位置环积分增益
-    float Position_integral_limit;               // 位置环积分项限幅，单位为rpm
-    float Position_output_limit;                // 位置环输出限幅，单位为rpm
-} Motor_LoopParameters_t;
 
 /*===========================================================================*/
 /*  FOC电机控制对象                                                           */
@@ -155,7 +145,7 @@ typedef struct
     Foc_CurrentLoop_t Current_loop;             // 电流环对象
     Foc_SpeedLoop_t Speed_loop;                 // 速度环对象
     Foc_PositionLoop_t Position_loop;           // 位置环对象
-    Motor_LoopParameters_t Loop_parameters;     // 当前生效的FOC环路参数
+    float Ab_filter_bandwidth;                  // 当前生效的AB滤波器带宽，单位为Hz
 
     uint8 Pole_pairs;                           // 电机极对数
     Motor_control_mode_t Control_mode;          // 当前电机控制模式
@@ -179,6 +169,15 @@ typedef struct
 extern Foc_motor_t Motor;                // 电机控制对象
 
 /***********************************************
+ * @brief : 使用Motor中的参数初始化FOC电流环、速度环和位置环
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
+void Motor_Control_Init(void);
+
+/***********************************************
  * @brief : 更新有感FOC电流环带宽并重算PI增益
  * @param : BandwidthHz 电流环带宽，单位为Hz
  * @return: 无
@@ -188,22 +187,30 @@ extern Foc_motor_t Motor;                // 电机控制对象
 void Motor_Control_SetCurrentBandwidth(uint16 BandwidthHz);
 
 /***********************************************
- * @brief : 更新电流、速度和位置环参数
- * @param : Parameters 三套控制环参数
+ * @brief : 更新速度环PI参数
+ * @param : Kp 比例增益
+ * @param : Ki 连续时间积分增益
+ * @param : IntegralLimit 积分项输出限幅，单位为A
  * @return: 无
- * @date  : 2026-08-29
+ * @date  : 2026-08-30
  * @author: L
  ************************************************/
-void Motor_Control_SetLoopParameters(const Motor_LoopParameters_t *Parameters);
+void Motor_Control_SetSpeedPi(float Kp,
+                              float Ki,
+                              float IntegralLimit);
 
 /***********************************************
- * @brief : 读取当前生效的FOC环路参数
- * @param : Parameters 参数输出地址
+ * @brief : 更新位置环纯Kp参数、输出限幅和角度死区
+ * @param : Kp 比例增益
+ * @param : OutputLimit 输出限幅，单位为rpm
+ * @param : Deadband_degree 角度死区，单位为度
  * @return: 无
- * @date  : 2026-08-29
+ * @date  : 2026-08-30
  * @author: L
  ************************************************/
-void Motor_Control_GetLoopParameters(Motor_LoopParameters_t *Parameters);
+void Motor_Control_SetPositionKp(float Kp,
+                                 float OutputLimit,
+                                 float Deadband_degree);
 
 /***********************************************
  * @brief : 更新电机机械角度和电角度
@@ -213,6 +220,15 @@ void Motor_Control_GetLoopParameters(Motor_LoopParameters_t *Parameters);
  * @author: L
  ************************************************/
 void Angle_Update(void);
+
+/***********************************************
+ * @brief : 读取扣除零偏并修正方向后的机械角度
+ * @param : 无
+ * @return: 机械角度，范围0~360度
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
+float Motor_Control_GetMechanicalDegree(void);
 
 /***********************************************
  * @brief : 使用AB滤波器计算电机机械转速，需按1 kHz周期调用

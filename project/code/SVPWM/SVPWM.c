@@ -10,11 +10,28 @@ SVPWM_t SVPWM =
 {
     .VBUS = 24.0f,
     .V_Margin = 0.95f,
-    .DQ_Limit = 24.0f * 0.95f / SQRT3,
+    .DQ_Limit = 24.0f * 0.95f *
+                (float)TCPWM_DUTY_OUTPUT_LIMIT /
+                (float)TCPWM_DUTY_MAX / SQRT3,
     .DutyA = SVPWM_DUTY_MAX / 2u,
     .DutyB = SVPWM_DUTY_MAX / 2u,
     .DutyC = SVPWM_DUTY_MAX / 2u
 };
+
+/***********************************************
+ * @brief : 获取功率桥允许使用的占空比范围比例
+ * @param : 无
+ * @return: 占空比范围比例，范围0~1
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
+static float SVPWM_GetDutyRange(void)
+{
+    return Float_Limit(
+        (float)TCPWM_DUTY_OUTPUT_LIMIT / (float)TCPWM_DUTY_MAX,
+        0.0f,
+        1.0f);
+}
 
 /***********************************************
  * @brief : 限制d/q电压矢量幅值，避免进入过调制区
@@ -63,11 +80,12 @@ static float SVPWM_DQ_LimitVoltage(float *Ud, float *Uq)
 /***********************************************
  * @brief : 将相电压换算为中心对齐PWM占空比
  * @param : PhaseVoltage 相电压，单位为V
+ * @param : DutyRange 功率桥允许使用的占空比范围比例
  * @return: 万分比占空比
  * @date  : 2026-08-17
  * @author: L
  ************************************************/
-static uint16 SVPWM_VoltageToDuty(float PhaseVoltage)
+static uint16 SVPWM_VoltageToDuty(float PhaseVoltage, float DutyRange)
 {
     float Duty;
     int32 DutyValue;
@@ -77,9 +95,9 @@ static uint16 SVPWM_VoltageToDuty(float PhaseVoltage)
         return (uint16)(SVPWM_DUTY_MAX / 2u);
     }
 
-    /* 半桥平均输出电压为(VBUS * Duty - VBUS / 2)。 */
-    Duty = 0.5f + PhaseVoltage / SVPWM.VBUS;
-    Duty = Float_Limit(Duty, 0.0f, 1.0f);
+    /* 将公共占空比中心放在可用范围中点，保持三相线电压不变。 */
+    Duty = 0.5f * DutyRange + PhaseVoltage / SVPWM.VBUS;
+    Duty = Float_Limit(Duty, 0.0f, DutyRange);
     DutyValue = (int32)(Duty * (float)SVPWM_DUTY_MAX + 0.5f);
 
     return (uint16)Int_Limit(
@@ -101,6 +119,8 @@ void VBUS_Get(void)
 
 void SVPWM_DQ_Limit_Update(void)
 {
+    float Duty_range;
+
     SVPWM.V_Margin = Float_Limit(SVPWM.V_Margin, 0.0f, 1.0f);
     if (SVPWM.VBUS <= 0.0f)
     {
@@ -108,8 +128,11 @@ void SVPWM_DQ_Limit_Update(void)
         return;
     }
 
-    /* 线性区最大电压矢量为VBUS/sqrt(3)，再乘以裕量。 */
-    SVPWM.DQ_Limit = SVPWM.VBUS * SVPWM.V_Margin / SQRT3;
+    Duty_range = SVPWM_GetDutyRange();
+
+    /* 将实际占空比范围和调制裕量同时计入最大电压矢量。 */
+    SVPWM.DQ_Limit =
+        SVPWM.VBUS * Duty_range * SVPWM.V_Margin / SQRT3;
 }
 
 float foc_voltage_calc_duty(float Ud,
@@ -121,12 +144,14 @@ float foc_voltage_calc_duty(float Ud,
 {
     InversePark_t InversePark;
     AlphaBeta_t AlphaBeta;
+    float Duty_range;
     float VoltageScale;
 
     InversePark.Ud = Ud;
     InversePark.Uq = Uq;
     VoltageScale =
         SVPWM_DQ_LimitVoltage(&InversePark.Ud, &InversePark.Uq);
+    Duty_range = SVPWM_GetDutyRange();
 
     /* d/q电压经过逆Park变换得到静止坐标系电压。 */
     AlphaBeta = foc_ipark_calc(InversePark, ElectricalAngle);
@@ -153,15 +178,15 @@ float foc_voltage_calc_duty(float Ud,
 
     if (DutyA != NULL)
     {
-        *DutyA = SVPWM_VoltageToDuty(Ua);
+        *DutyA = SVPWM_VoltageToDuty(Ua, Duty_range);
     }
     if (DutyB != NULL)
     {
-        *DutyB = SVPWM_VoltageToDuty(Ub);
+        *DutyB = SVPWM_VoltageToDuty(Ub, Duty_range);
     }
     if (DutyC != NULL)
     {
-        *DutyC = SVPWM_VoltageToDuty(Uc);
+        *DutyC = SVPWM_VoltageToDuty(Uc, Duty_range);
     }
 
     if ((DutyA != NULL) && (DutyB != NULL) && (DutyC != NULL))

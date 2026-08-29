@@ -28,8 +28,11 @@
 #define FOC_PROTOCOL_CURRENT_BW_MIN_HZ    (1u)       // 电流环带宽下限，单位为Hz
 #define FOC_PROTOCOL_CURRENT_BW_MAX_HZ    (5000u)    // 电流环带宽上限，单位为Hz
 #define FOC_PROTOCOL_LOOP_GAIN_MAX        (100.0f)   // 速度、位置环增益上限
-#define FOC_PROTOCOL_SPEED_LIMIT_MAX      (100.0f)   // 速度环限幅上限，单位为A
+#define FOC_PROTOCOL_SPEED_INTEGRAL_LIMIT_MAX (5.0f) // 速度环积分项限幅上限，单位为A
+#define FOC_PROTOCOL_SPEED_RAMP_MIN       (1.0f)      // 速度斜坡速率下限，单位为rpm/s
+#define FOC_PROTOCOL_SPEED_RAMP_MAX       (100000.0f) // 速度斜坡速率上限，单位为rpm/s
 #define FOC_PROTOCOL_POSITION_LIMIT_MAX   (30000.0f) // 位置环限幅上限，单位为rpm
+#define FOC_PROTOCOL_POSITION_DEADBAND_MAX (180.0f)  // 位置环角度死区上限，单位为度
 
 /*===========================================================================*/
 /*  FOC-UART流式接收状态                                                      */

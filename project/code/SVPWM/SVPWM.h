@@ -12,7 +12,7 @@ typedef struct
 {
     float VBUS;                         // 当前母线电压，单位为V
     float V_Margin;                     // 线性调制区电压裕量，范围0~1
-    float DQ_Limit;                     // d/q电压矢量幅值上限，单位为V
+    float DQ_Limit;                     // 按实际占空比范围计算的d/q电压矢量上限，单位为V
     uint16 DutyA;                       // 最近一次A相PWM占空比，范围0~9000
     uint16 DutyB;                       // 最近一次B相PWM占空比，范围0~9000
     uint16 DutyC;                       // 最近一次C相PWM占空比，范围0~9000

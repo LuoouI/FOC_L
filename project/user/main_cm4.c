@@ -51,6 +51,8 @@ int main(void)
     
     debug_init();                       // 调试串口初始化
 
+    Motor_Control_Init();               // 初始化FOC控制环默认参数
+
     FOC_Protocol_Init();                // 初始化上位机开环控制协议
    
     key_init(10);                       // 按键初始化
@@ -77,12 +79,8 @@ int main(void)
     // 此处编写用户代码 例如外设初始化代码等
     for(;;)
     {
-        // 此处编写需要循环执行的代码   
-        My_Key_Service();
-
         FOC_Protocol_Service();          // 主循环处理串口接收和遥测发送
-
-        // 此处编写需要循环执行的代码
+  
     }
 }
 

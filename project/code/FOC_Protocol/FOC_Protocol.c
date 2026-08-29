@@ -143,6 +143,7 @@ static void FOC_Protocol_StopControl(void)
     Motor.Open_loop.Started = 0u;
     Motor.Current_loop.Id_target = 0.0f;
     Motor.Current_loop.Iq_target = 0.0f;
+    Motor.Speed_loop.Command_rpm = 0.0f;
     Motor.Speed_loop.Target_rpm = 0.0f;
     Motor.Speed_loop.Iq_output = 0.0f;
     Motor.Position_loop.Target_degree = 0.0f;
@@ -165,51 +166,55 @@ static void FOC_Protocol_StopControl(void)
  ************************************************/
 static void FOC_Protocol_HandleParameterWrite(const uint8 *Payload)
 {
-    Motor_LoopParameters_t Parameters;
-
-    Parameters.Current_bandwidth = FOC_Protocol_ReadU16(&Payload[0]);
-    Parameters.Speed_kp = FOC_Protocol_ReadFloat(&Payload[8]);
-    Parameters.Speed_ki = FOC_Protocol_ReadFloat(&Payload[12]);
-    Parameters.Speed_integral_limit = FOC_Protocol_ReadFloat(&Payload[16]);
-    Parameters.Speed_output_limit = FOC_Protocol_ReadFloat(&Payload[20]);
-    Parameters.Position_kp = FOC_Protocol_ReadFloat(&Payload[24]);
-    Parameters.Position_ki = FOC_Protocol_ReadFloat(&Payload[28]);
-    Parameters.Position_integral_limit = FOC_Protocol_ReadFloat(&Payload[32]);
-    Parameters.Position_output_limit = FOC_Protocol_ReadFloat(&Payload[36]);
+    uint16 Current_bandwidth = FOC_Protocol_ReadU16(&Payload[0]);
+    float Ramp_rate = FOC_Protocol_ReadFloat(&Payload[4]);
+    float Speed_kp = FOC_Protocol_ReadFloat(&Payload[8]);
+    float Speed_ki = FOC_Protocol_ReadFloat(&Payload[12]);
+    float Speed_integral_limit = FOC_Protocol_ReadFloat(&Payload[16]);
+    float Ab_filter_bandwidth = FOC_Protocol_ReadFloat(&Payload[20]);
+    float Position_kp = FOC_Protocol_ReadFloat(&Payload[24]);
+    float Position_output_limit = FOC_Protocol_ReadFloat(&Payload[36]);
+    float Position_deadband = FOC_Protocol_ReadFloat(&Payload[40]);
 
     /* 控制运行期间不改环路参数，避免PID状态和输出限幅突变。 */
     if ((Protocol.Enabled != 0u) ||
-        (Parameters.Current_bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
-        (Parameters.Current_bandwidth > FOC_PROTOCOL_CURRENT_BW_MAX_HZ) ||
-        (Parameters.Speed_kp != Parameters.Speed_kp) ||
-        (Parameters.Speed_ki != Parameters.Speed_ki) ||
-        (Parameters.Speed_integral_limit != Parameters.Speed_integral_limit) ||
-        (Parameters.Speed_output_limit != Parameters.Speed_output_limit) ||
-        (Parameters.Position_kp != Parameters.Position_kp) ||
-        (Parameters.Position_ki != Parameters.Position_ki) ||
-        (Parameters.Position_integral_limit != Parameters.Position_integral_limit) ||
-        (Parameters.Position_output_limit != Parameters.Position_output_limit) ||
-        (Parameters.Speed_kp < 0.0f) ||
-        (Parameters.Speed_kp > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
-        (Parameters.Speed_ki < 0.0f) ||
-        (Parameters.Speed_ki > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
-        (Parameters.Speed_integral_limit < 0.0f) ||
-        (Parameters.Speed_integral_limit > FOC_PROTOCOL_SPEED_LIMIT_MAX) ||
-        (Parameters.Speed_output_limit < 0.0f) ||
-        (Parameters.Speed_output_limit > FOC_PROTOCOL_SPEED_LIMIT_MAX) ||
-        (Parameters.Position_kp < 0.0f) ||
-        (Parameters.Position_kp > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
-        (Parameters.Position_ki < 0.0f) ||
-        (Parameters.Position_ki > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
-        (Parameters.Position_integral_limit < 0.0f) ||
-        (Parameters.Position_integral_limit > FOC_PROTOCOL_POSITION_LIMIT_MAX) ||
-        (Parameters.Position_output_limit < 0.0f) ||
-        (Parameters.Position_output_limit > FOC_PROTOCOL_POSITION_LIMIT_MAX))
+        (Current_bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
+        (Current_bandwidth > FOC_PROTOCOL_CURRENT_BW_MAX_HZ) ||
+        (Ramp_rate != Ramp_rate) ||
+        (Ramp_rate < 0.0f) ||
+        (Ramp_rate > FOC_PROTOCOL_SPEED_RAMP_MAX) ||
+        (Speed_kp != Speed_kp) ||
+        (Speed_ki != Speed_ki) ||
+        (Speed_integral_limit != Speed_integral_limit) ||
+        (Ab_filter_bandwidth != Ab_filter_bandwidth) ||
+        (Position_kp != Position_kp) ||
+        (Position_output_limit != Position_output_limit) ||
+        (Position_deadband != Position_deadband) ||
+        (Speed_kp < 0.0f) ||
+        (Speed_kp > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
+        (Speed_ki < 0.0f) ||
+        (Speed_ki > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
+        (Speed_integral_limit < 0.0f) ||
+        (Speed_integral_limit > FOC_PROTOCOL_SPEED_INTEGRAL_LIMIT_MAX) ||
+        (Ab_filter_bandwidth < MOTOR_AB_FILTER_BW_MIN_HZ) ||
+        (Ab_filter_bandwidth > MOTOR_AB_FILTER_BW_MAX_HZ) ||
+        (Position_kp < 0.0f) ||
+        (Position_kp > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
+        (Position_output_limit < 0.0f) ||
+        (Position_output_limit > FOC_PROTOCOL_POSITION_LIMIT_MAX) ||
+        (Position_deadband < 0.0f) ||
+        (Position_deadband > FOC_PROTOCOL_POSITION_DEADBAND_MAX))
     {
         return;
     }
 
-    Motor_Control_SetLoopParameters(&Parameters);
+    Motor_Control_SetCurrentBandwidth(Current_bandwidth);
+    Motor.Speed_loop.Ramp_rate = Ramp_rate;
+    Motor_Control_SetSpeedPi(Speed_kp, Speed_ki, Speed_integral_limit);
+    Motor_Control_SetPositionKp(Position_kp,
+                                Position_output_limit,
+                                Position_deadband);
+    Motor.Ab_filter_bandwidth = Ab_filter_bandwidth;
     Protocol.Parameters_seen = 1u;
     FOC_Protocol_SendLoopParameters();
 }
@@ -225,12 +230,10 @@ static void FOC_Protocol_SendLoopParameters(void)
 {
     uint8 Frame[FOC_PROTOCOL_PARAMETER_LENGTH + 10u];
     uint8 *Payload = &Frame[8];
-    Motor_LoopParameters_t Parameters;
     uint16 Crc;
 
     /* 参数读取表示上位机已完成连接同步，可使用当前参数启动有感FOC。 */
     Protocol.Parameters_seen = 1u;
-    Motor_Control_GetLoopParameters(&Parameters);
     memset(Frame, 0, sizeof(Frame));
     Frame[0] = 0xaau;
     Frame[1] = 0x55u;
@@ -238,15 +241,17 @@ static void FOC_Protocol_SendLoopParameters(void)
     Frame[3] = FOC_PROTOCOL_FRAME_TYPE_PARAMETER_WRITE;
     FOC_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
     FOC_Protocol_WriteU16(&Frame[6], FOC_PROTOCOL_PARAMETER_LENGTH);
-    FOC_Protocol_WriteU16(&Payload[0], Parameters.Current_bandwidth);
-    FOC_Protocol_WriteFloat(&Payload[8], Parameters.Speed_kp);
-    FOC_Protocol_WriteFloat(&Payload[12], Parameters.Speed_ki);
-    FOC_Protocol_WriteFloat(&Payload[16], Parameters.Speed_integral_limit);
-    FOC_Protocol_WriteFloat(&Payload[20], Parameters.Speed_output_limit);
-    FOC_Protocol_WriteFloat(&Payload[24], Parameters.Position_kp);
-    FOC_Protocol_WriteFloat(&Payload[28], Parameters.Position_ki);
-    FOC_Protocol_WriteFloat(&Payload[32], Parameters.Position_integral_limit);
-    FOC_Protocol_WriteFloat(&Payload[36], Parameters.Position_output_limit);
+    FOC_Protocol_WriteU16(&Payload[0], Motor.Current_loop.Bandwidth);
+    FOC_Protocol_WriteFloat(&Payload[4], Motor.Speed_loop.Ramp_rate);
+    FOC_Protocol_WriteFloat(&Payload[8], Motor.Speed_loop.Pid.Kp);
+    FOC_Protocol_WriteFloat(&Payload[12], Motor.Speed_loop.Pid.Ki);
+    FOC_Protocol_WriteFloat(&Payload[16], Motor.Speed_loop.Integral_limit);
+    FOC_Protocol_WriteFloat(&Payload[20], Motor.Ab_filter_bandwidth);
+    FOC_Protocol_WriteFloat(&Payload[24], Motor.Position_loop.Pid.Kp);
+    FOC_Protocol_WriteFloat(&Payload[28], 0.0f);
+    FOC_Protocol_WriteFloat(&Payload[32], 0.0f);
+    FOC_Protocol_WriteFloat(&Payload[36], Motor.Position_loop.Pid.LimMax);
+    FOC_Protocol_WriteFloat(&Payload[40], Motor.Position_loop.Deadband_degree);
     Crc = FOC_Protocol_Crc16(&Frame[2],
                              (uint16)(6u + FOC_PROTOCOL_PARAMETER_LENGTH));
     FOC_Protocol_WriteU16(
@@ -269,17 +274,27 @@ static void FOC_Protocol_HandleEncoderFoc(const uint8 *Payload)
     int8 Direction = ((Flags & 0x02u) != 0u) ? -1 : 1;
     float Primary_target = FOC_Protocol_ReadFloat(&Payload[4]);
     float Id_target = FOC_Protocol_ReadFloat(&Payload[8]);
+    float Ramp_rate = Motor.Speed_loop.Ramp_rate;
     uint16 Bandwidth = Motor.Current_loop.Bandwidth;
 
     if (Foc_mode == (uint8)MOTOR_FOC_CURRENT)
     {
         Bandwidth = FOC_Protocol_ReadU16(&Payload[12]);
     }
+    else if (Foc_mode == (uint8)MOTOR_FOC_SPEED)
+    {
+        Ramp_rate = FOC_Protocol_ReadFloat(&Payload[12]);
+    }
 
     if ((Foc_mode < (uint8)MOTOR_FOC_CURRENT) ||
         (Foc_mode > (uint8)MOTOR_FOC_POSITION) ||
         (Primary_target != Primary_target) ||
         (Id_target != Id_target) ||
+        ((Foc_mode == (uint8)MOTOR_FOC_SPEED) &&
+         ((Ramp_rate != Ramp_rate) ||
+          (Ramp_rate < FOC_PROTOCOL_SPEED_RAMP_MIN) ||
+          (Ramp_rate > FOC_PROTOCOL_SPEED_RAMP_MAX))) ||
+        (Motor.Zero_ready == 0u) ||
         ((Foc_mode == (uint8)MOTOR_FOC_CURRENT) &&
          ((Bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
           (Bandwidth > FOC_PROTOCOL_CURRENT_BW_MAX_HZ))) ||
@@ -309,9 +324,10 @@ static void FOC_Protocol_HandleEncoderFoc(const uint8 *Payload)
     }
     else if (Foc_mode == (uint8)MOTOR_FOC_SPEED)
     {
-        Motor.Speed_loop.Target_rpm =
+        Motor.Speed_loop.Command_rpm =
             Float_Limit(Primary_target, -50000.0f, 50000.0f) *
             (float)Direction;
+        Motor.Speed_loop.Ramp_rate = Ramp_rate;
         Motor.Current_loop.Iq_target = 0.0f;
     }
     else
@@ -766,7 +782,6 @@ static void FOC_Protocol_ParseByte(uint8 Data)
 void FOC_Protocol_Init(void)
 {
     memset(&Protocol, 0, sizeof(Protocol));
-    Motor_Control_SetLoopParameters(&Motor.Loop_parameters);
 }
 
 void FOC_Protocol_Service(void)
