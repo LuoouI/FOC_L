@@ -129,7 +129,7 @@ typedef struct
 typedef struct
 {
     float Target_degree;                        // 位置目标，单位为度
-    PID_t Pid;                                  // 位置调节器，输出为速度目标
+    PID_t Pid;                                  // 位置纯Kp调节器，输出为速度目标
     float Speed_output;                         // 位置环输出，单位为rpm
     float Deadband_degree;                      // 位置角度死区，单位为度
 } Foc_PositionLoop_t;

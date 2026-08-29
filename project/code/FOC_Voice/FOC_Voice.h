@@ -44,7 +44,7 @@ typedef enum
     FOC_VOICE_PITCH_B5   = 988,                // B5音符，频率约988 Hz
     FOC_VOICE_PITCH_C6   = 1047,               // C6音符，频率约1047 Hz
     FOC_VOICE_PITCH_CS6  = 1109                // C#6音符，频率约1109 Hz
-} FOC_VoicePitch_t;
+} Foc_voicePitch_t;
 
 /*===========================================================================*/
 /*  音符主发声相                                                              */
@@ -54,25 +54,25 @@ typedef enum
     FOC_VOICE_PHASE_A = 0,                     // A相正向、B相反向输出
     FOC_VOICE_PHASE_B,                         // B相正向、C相反向输出
     FOC_VOICE_PHASE_C                          // C相正向、A相反向输出
-} FOC_VoicePhase_t;
+} Foc_voicePhase_t;
 
 /*===========================================================================*/
 /*  单个音符描述                                                              */
 /*===========================================================================*/
 typedef struct
 {
-    FOC_VoicePitch_t Pitch;                    // 音符频率，休止符为0
+    Foc_voicePitch_t Pitch;                    // 音符频率，休止符为0
     uint8 Duration_8th;                         // 音符时值，以八分音符为单位
-} FOC_VoiceNote_t;
+} Foc_voiceNote_t;
 
 /*===========================================================================*/
 /*  乐曲段落描述                                                              */
 /*===========================================================================*/
 typedef struct
 {
-    const FOC_VoiceNote_t *Note_data;           // 段落音符数据
+    const Foc_voiceNote_t *Note_data;           // 段落音符数据
     uint16 Note_count;                           // 段落音符数量
-} FOC_VoiceSection_t;
+} Foc_voiceSection_t;
 
 /*===========================================================================*/
 /*  乐曲描述                                                                  */
@@ -80,10 +80,10 @@ typedef struct
 typedef struct
 {
     const char *Name;                           // UTF-8编码乐曲名称
-    const FOC_VoiceSection_t *Section_data;     // 乐曲段落数据
+    const Foc_voiceSection_t *Section_data;     // 乐曲段落数据
     uint16 Bpm;                                  // 乐曲播放速度
     uint8 Section_count;                         // 乐曲段落数量
-} FOC_VoiceSong_t;
+} Foc_voiceSong_t;
 
 /*===========================================================================*/
 /*  电机音乐播放状态                                                          */
@@ -101,7 +101,7 @@ typedef struct
     uint8 Section_index;                         // 当前乐曲段落索引
     uint8 Song_id;                               // 当前乐曲编号
     uint8 Playing;                               // 正在播放标志
-} FOC_Voice_t;
+} Foc_voice_t;
 
 /***********************************************
  * @brief : 阻塞播放一枚带正弦包络的音符，调用前应确保电机停止
@@ -113,9 +113,9 @@ typedef struct
  * @date  : 2026-08-29
  * @author: L
  ************************************************/
-void FOC_Voice_PlayTone(
-    FOC_VoicePhase_t Phase,
-    FOC_VoicePitch_t Pitch,
+void Foc_voice_PlayTone(
+    Foc_voicePhase_t Phase,
+    Foc_voicePitch_t Pitch,
     uint16 Tone_ms,
     uint16 Gap_ms);
 
@@ -126,7 +126,7 @@ void FOC_Voice_PlayTone(
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-void FOC_Voice_Start(void);
+void Foc_voice_Start(void);
 
 /***********************************************
  * @brief : 从头播放指定的下位机内置乐曲
@@ -135,7 +135,7 @@ void FOC_Voice_Start(void);
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-uint8 FOC_Voice_StartSong(uint8 Song_id);
+uint8 Foc_voice_StartSong(uint8 Song_id);
 
 /***********************************************
  * @brief : 获取下位机内置乐曲数量
@@ -144,7 +144,7 @@ uint8 FOC_Voice_StartSong(uint8 Song_id);
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-uint8 FOC_Voice_GetSongCount(void);
+uint8 Foc_voice_GetSongCount(void);
 
 /***********************************************
  * @brief : 获取指定内置乐曲的UTF-8名称
@@ -153,7 +153,7 @@ uint8 FOC_Voice_GetSongCount(void);
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-const char *FOC_Voice_GetSongName(uint8 Song_id);
+const char *Foc_voice_GetSongName(uint8 Song_id);
 
 /***********************************************
  * @brief : 停止播放并关闭电机电压输出
@@ -162,7 +162,7 @@ const char *FOC_Voice_GetSongName(uint8 Song_id);
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-void FOC_Voice_Stop(void);
+void Foc_voice_Stop(void);
 
 /***********************************************
  * @brief : 查询电机音乐是否正在播放
@@ -171,7 +171,7 @@ void FOC_Voice_Stop(void);
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-uint8 FOC_Voice_IsPlaying(void);
+uint8 Foc_voice_IsPlaying(void);
 
 /***********************************************
  * @brief : 执行一次电机音乐控制周期，需按20 kHz周期调用
@@ -180,6 +180,6 @@ uint8 FOC_Voice_IsPlaying(void);
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-void FOC_Voice_Loop(void);
+void Foc_voice_Loop(void);
 
 #endif

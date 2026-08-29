@@ -1,4 +1,4 @@
-#include "FOC_Voice.h"
+#include "Foc_voice.h"
 #include "Fast_sin/Fast_sin.h"
 #include "Function/Function.h"
 #include "Motor_Control/Motor_Control.h"
@@ -8,7 +8,7 @@
 /*===========================================================================*/
 /*  《奇迹再现》主歌，1=A                                                     */
 /*===========================================================================*/
-static const FOC_VoiceNote_t Miracle_verse[] =
+static const Foc_voiceNote_t Miracle_verse[] =
 {
     /* 第1~4小节 */
     {FOC_VOICE_PITCH_REST, 2u}, {FOC_VOICE_PITCH_A4, 1u},
@@ -65,7 +65,7 @@ static const FOC_VoiceNote_t Miracle_verse[] =
     {FOC_VOICE_PITCH_DS4, 1u}
 };
 
-static const FOC_VoiceSection_t Miracle_song[] =
+static const Foc_voiceSection_t Miracle_song[] =
 {
     {Miracle_verse, (uint16)(sizeof(Miracle_verse) / sizeof(Miracle_verse[0]))}
 };
@@ -73,7 +73,7 @@ static const FOC_VoiceSection_t Miracle_song[] =
 /*===========================================================================*/
 /*  《小星星》旋律                                                            */
 /*===========================================================================*/
-static const FOC_VoiceNote_t Twinkle_verse[] =
+static const Foc_voiceNote_t Twinkle_verse[] =
 {
     {FOC_VOICE_PITCH_C4, 2u}, {FOC_VOICE_PITCH_C4, 2u},
     {FOC_VOICE_PITCH_G4, 2u}, {FOC_VOICE_PITCH_G4, 2u},
@@ -101,7 +101,7 @@ static const FOC_VoiceNote_t Twinkle_verse[] =
     {FOC_VOICE_PITCH_C4, 4u}
 };
 
-static const FOC_VoiceSection_t Twinkle_song[] =
+static const Foc_voiceSection_t Twinkle_song[] =
 {
     {Twinkle_verse, (uint16)(sizeof(Twinkle_verse) / sizeof(Twinkle_verse[0]))}
 };
@@ -109,7 +109,7 @@ static const FOC_VoiceSection_t Twinkle_song[] =
 /*===========================================================================*/
 /*  《欢乐颂》旋律                                                            */
 /*===========================================================================*/
-static const FOC_VoiceNote_t Ode_verse[] =
+static const Foc_voiceNote_t Ode_verse[] =
 {
     {FOC_VOICE_PITCH_E4, 2u}, {FOC_VOICE_PITCH_E4, 2u},
     {FOC_VOICE_PITCH_F4, 2u}, {FOC_VOICE_PITCH_G4, 2u},
@@ -129,7 +129,7 @@ static const FOC_VoiceNote_t Ode_verse[] =
     {FOC_VOICE_PITCH_C4, 4u}
 };
 
-static const FOC_VoiceSection_t Ode_song[] =
+static const Foc_voiceSection_t Ode_song[] =
 {
     {Ode_verse, (uint16)(sizeof(Ode_verse) / sizeof(Ode_verse[0]))}
 };
@@ -137,7 +137,7 @@ static const FOC_VoiceSection_t Ode_song[] =
 /*===========================================================================*/
 /*  《天使的翅膀》指定副歌片段，移调为1=F                                    */
 /*===========================================================================*/
-static const FOC_VoiceNote_t Angel_verse[] =
+static const Foc_voiceNote_t Angel_verse[] =
 {
     /* 第一乐句 */
     {FOC_VOICE_PITCH_G4, 1u}, {FOC_VOICE_PITCH_A4, 1u},
@@ -164,12 +164,12 @@ static const FOC_VoiceNote_t Angel_verse[] =
     {FOC_VOICE_PITCH_E4, 2u}, {FOC_VOICE_PITCH_D4, 8u}
 };
 
-static const FOC_VoiceSection_t Angel_song[] =
+static const Foc_voiceSection_t Angel_song[] =
 {
     {Angel_verse, (uint16)(sizeof(Angel_verse) / sizeof(Angel_verse[0]))}
 };
 
-static const FOC_VoiceSong_t Voice_songs[] =
+static const Foc_voiceSong_t Voice_songs[] =
 {
     {
         "奇迹再现",
@@ -197,7 +197,7 @@ static const FOC_VoiceSong_t Voice_songs[] =
     }
 };
 
-static volatile FOC_Voice_t Voice =
+static volatile Foc_voice_t Voice =
 {
     .Note_elapsed = 0u,
     .Note_total = 0u,
@@ -219,7 +219,7 @@ static volatile FOC_Voice_t Voice =
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-static void FOC_Voice_OutputNeutral(void)
+static void Foc_voice_OutputNeutral(void)
 {
     My_TCPWM_SetDuty(
         (uint16)(TCPWM_DUTY_MAX / 2u),
@@ -238,7 +238,7 @@ static void FOC_Voice_OutputNeutral(void)
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-static void FOC_Voice_Finish(void)
+static void Foc_voice_Finish(void)
 {
     Voice.Playing = 0u;
     Voice.Gate_count = 0u;
@@ -248,7 +248,7 @@ static void FOC_Voice_Finish(void)
     Motor.Open_loop.Uq = 0.0f;
     Motor.Open_loop.Step = 0;
     Motor.Control_mode = MOTOR_CONTROL_OPEN_LOOP;
-    FOC_Voice_OutputNeutral();
+    Foc_voice_OutputNeutral();
 }
 
 /***********************************************
@@ -258,11 +258,11 @@ static void FOC_Voice_Finish(void)
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-static uint8 FOC_Voice_LoadNote(void)
+static uint8 Foc_voice_LoadNote(void)
 {
-    const FOC_VoiceSong_t *Song;
-    const FOC_VoiceSection_t *Section;
-    const FOC_VoiceNote_t *Note;
+    const Foc_voiceSong_t *Song;
+    const Foc_voiceSection_t *Section;
+    const Foc_voiceNote_t *Note;
     uint32 Duration_count;
 
     Song = &Voice_songs[Voice.Song_id - 1u];
@@ -281,7 +281,7 @@ static uint8 FOC_Voice_LoadNote(void)
 
     if (Voice.Section_index >= Song->Section_count)
     {
-        FOC_Voice_Finish();
+        Foc_voice_Finish();
         return 0u;
     }
 
@@ -322,7 +322,7 @@ static uint8 FOC_Voice_LoadNote(void)
  * @date  : 2026-08-29
  * @author: L
  ************************************************/
-static float FOC_Voice_GetEnvelope(
+static float Foc_voice_GetEnvelope(
     uint32 Note_elapsed,
     uint32 Gate_count)
 {
@@ -365,10 +365,10 @@ static float FOC_Voice_GetEnvelope(
  * @date  : 2026-08-29
  * @author: L
  ************************************************/
-static void FOC_Voice_Output(
+static void Foc_voice_Output(
     float Envelope,
     uint16 Tone_phase,
-    FOC_VoicePhase_t Phase)
+    Foc_voicePhase_t Phase)
 {
     uint16 DutyA;
     uint16 DutyB;
@@ -427,9 +427,9 @@ static void FOC_Voice_Output(
 }
 
 /* 阻塞播放一枚正弦包络音符。 */
-void FOC_Voice_PlayTone(
-    FOC_VoicePhase_t Phase,
-    FOC_VoicePitch_t Pitch,
+void Foc_voice_PlayTone(
+    Foc_voicePhase_t Phase,
+    Foc_voicePitch_t Pitch,
     uint16 Tone_ms,
     uint16 Gap_ms)
 {
@@ -453,26 +453,26 @@ void FOC_Voice_PlayTone(
 
     for (Tone_index = 0u; Tone_index < Tone_count; Tone_index++)
     {
-        Envelope = FOC_Voice_GetEnvelope(Tone_index, Gate_count);
-        FOC_Voice_Output(Envelope, Tone_phase, Phase);
+        Envelope = Foc_voice_GetEnvelope(Tone_index, Gate_count);
+        Foc_voice_Output(Envelope, Tone_phase, Phase);
         Tone_phase = Angle_Wrap(
             (int32)Tone_phase + (int32)Tone_step);
         system_delay_us(1000000u / FOC_VOICE_CONTROL_HZ);
     }
 
-    FOC_Voice_OutputNeutral();
+    Foc_voice_OutputNeutral();
     interrupt_global_enable(Irq_state);
     system_delay_ms(Gap_ms);
 }
 
-void FOC_Voice_Start(void)
+void Foc_voice_Start(void)
 {
-    (void)FOC_Voice_StartSong(FOC_VOICE_SONG_ID);
+    (void)Foc_voice_StartSong(FOC_VOICE_SONG_ID);
 }
 
-uint8 FOC_Voice_StartSong(uint8 Song_id)
+uint8 Foc_voice_StartSong(uint8 Song_id)
 {
-    if ((Song_id == 0u) || (Song_id > FOC_Voice_GetSongCount()))
+    if ((Song_id == 0u) || (Song_id > Foc_voice_GetSongCount()))
     {
         return 0u;
     }
@@ -498,14 +498,14 @@ uint8 FOC_Voice_StartSong(uint8 Song_id)
     return 1u;
 }
 
-uint8 FOC_Voice_GetSongCount(void)
+uint8 Foc_voice_GetSongCount(void)
 {
     return (uint8)(sizeof(Voice_songs) / sizeof(Voice_songs[0]));
 }
 
-const char *FOC_Voice_GetSongName(uint8 Song_id)
+const char *Foc_voice_GetSongName(uint8 Song_id)
 {
-    if ((Song_id == 0u) || (Song_id > FOC_Voice_GetSongCount()))
+    if ((Song_id == 0u) || (Song_id > Foc_voice_GetSongCount()))
     {
         return NULL;
     }
@@ -513,33 +513,33 @@ const char *FOC_Voice_GetSongName(uint8 Song_id)
     return Voice_songs[Song_id - 1u].Name;
 }
 
-void FOC_Voice_Stop(void)
+void Foc_voice_Stop(void)
 {
     if ((Voice.Playing != 0u) ||
         (Motor.Control_mode == MOTOR_CONTROL_VOICE))
     {
-        FOC_Voice_Finish();
+        Foc_voice_Finish();
     }
 }
 
-uint8 FOC_Voice_IsPlaying(void)
+uint8 Foc_voice_IsPlaying(void)
 {
     return Voice.Playing;
 }
 
-void FOC_Voice_Loop(void)
+void Foc_voice_Loop(void)
 {
     float Envelope;
 
     if (Voice.Playing == 0u)
     {
-        FOC_Voice_Finish();
+        Foc_voice_Finish();
         return;
     }
 
     if (Voice.Note_total == 0u)
     {
-        if (FOC_Voice_LoadNote() == 0u)
+        if (Foc_voice_LoadNote() == 0u)
         {
             return;
         }
@@ -547,16 +547,16 @@ void FOC_Voice_Loop(void)
     else if (Voice.Note_elapsed >= Voice.Note_total)
     {
         Voice.Note_index++;
-        if (FOC_Voice_LoadNote() == 0u)
+        if (Foc_voice_LoadNote() == 0u)
         {
             return;
         }
     }
 
-    Envelope = FOC_Voice_GetEnvelope(
+    Envelope = Foc_voice_GetEnvelope(
         Voice.Note_elapsed,
         Voice.Gate_count);
-    FOC_Voice_Output(
+    Foc_voice_Output(
         Envelope,
         Voice.Tone_phase,
         FOC_VOICE_PHASE_A);

@@ -42,14 +42,14 @@ typedef struct
     uint8 Data[FOC_PROTOCOL_FRAME_MAX];          // 当前接收帧数据
     uint16 Length;                               // 当前已接收字节数
     uint16 Expected_length;                      // 当前完整帧字节数
-} FOC_ProtocolParser_t;
+} Foc_ProtocolParser_t;
 
 /*===========================================================================*/
 /*  FOC-UART协议运行状态                                                      */
 /*===========================================================================*/
 typedef struct
 {
-    FOC_ProtocolParser_t Parser;                 // 流式接收状态
+    Foc_ProtocolParser_t Parser;                 // 流式接收状态
     volatile uint32 Time_ms;                     // 协议毫秒时间基准
     uint32 Last_control_ms;                      // 最近控制帧接收时刻
     uint32 Voice_session;                        // 当前音乐播放会话标识
@@ -62,7 +62,7 @@ typedef struct
     uint8 Enabled;                               // 控制输出使能标志
     uint8 Song_id;                               // 当前曲目编号
     uint8 Voice_selected;                        // 音乐模式选中标志
-} FOC_Protocol_t;
+} Foc_Protocol_t;
 
 /***********************************************
  * @brief : 初始化FOC-UART协议状态，复用调试串口115200 bit/s
@@ -71,7 +71,7 @@ typedef struct
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-void FOC_Protocol_Init(void);
+void Foc_Protocol_Init(void);
 
 /***********************************************
  * @brief : 处理串口接收、乐曲选择和播放开关
@@ -80,7 +80,7 @@ void FOC_Protocol_Init(void);
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-void FOC_Protocol_Service(void);
+void Foc_Protocol_Service(void);
 
 /***********************************************
  * @brief : 更新FOC-UART协议毫秒时间基准，需按1 kHz调用
@@ -89,6 +89,6 @@ void FOC_Protocol_Service(void);
  * @date  : 2026-08-28
  * @author: L
  ************************************************/
-void FOC_Protocol_Tick1ms(void);
+void Foc_Protocol_Tick1ms(void);
 
 #endif

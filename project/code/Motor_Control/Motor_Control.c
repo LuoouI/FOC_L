@@ -2,7 +2,7 @@
 #include "float.h"
 #include "Current_sample/Current_sample.h"
 #include "Filter/AB_Filter.h"
-#include "FOC_Voice/FOC_Voice.h"
+#include "Foc_voice/Foc_voice.h"
 #include "Motor_Flash/Motor_Flash.h"
 #include "My_TCPWM/My_TCPWM.h"
 #include "SVPWM/SVPWM.h"
@@ -140,6 +140,15 @@ static float Position_ErrorByDirection(float Target_degree,
 {
     float Error_degree;
 
+    while (Target_degree >= 360.0f)
+    {
+        Target_degree -= 360.0f;
+    }
+    while (Target_degree < 0.0f)
+    {
+        Target_degree += 360.0f;
+    }
+
     Error_degree = Target_degree - Mechanical_degree;
     if (Direction >= 0)
     {
@@ -173,6 +182,19 @@ void Angle_Update(void)
 
     Motor.Encoder.Electrical_angle =
         Angle_Wrap(MechAng * (int32)Motor.Pole_pairs);
+}
+
+float Motor_Control_GetMechanicalDegree(void)
+{
+    int32 Mechanical_count;
+
+    Mechanical_count =
+        ((int32)Motor.Encoder.Mechanical_angle -
+         (int32)Motor.Encoder.Zero_offset) *
+        (int32)Motor.Encoder.Direction;
+    Mechanical_count = (int32)Angle_Wrap(Mechanical_count);
+
+    return (float)Mechanical_count * 360.0f / (float)ANGLE_PERIOD;
 }
 
 void RPM_Cal(void)
@@ -218,8 +240,8 @@ void RPM_Cal(void)
  * @author: L
  ************************************************/
 static void PHASE_TestBeep(
-    FOC_VoicePhase_t Phase,
-    FOC_VoicePitch_t Pitch,
+    Foc_voicePhase_t Phase,
+    Foc_voicePitch_t Pitch,
     uint16 Tone_ms,
     uint16 Gap_ms,
     uint8 Beep_count)
@@ -228,7 +250,7 @@ static void PHASE_TestBeep(
 
     for (Beep_index = 0u; Beep_index < Beep_count; Beep_index++)
     {
-        FOC_Voice_PlayTone(Phase, Pitch, Tone_ms, Gap_ms);
+        Foc_voice_PlayTone(Phase, Pitch, Tone_ms, Gap_ms);
     }
 }
 
@@ -343,7 +365,7 @@ static uint16 Zero_CalibrationSample(void)
  ************************************************/
 static void Zero_CalibrationSuccessTone(void)
 {
-    static const FOC_VoicePitch_t Tone_pitch[7] =
+    static const Foc_voicePitch_t Tone_pitch[7] =
     {
         FOC_VOICE_PITCH_D5,
         FOC_VOICE_PITCH_E5,
@@ -357,7 +379,7 @@ static void Zero_CalibrationSuccessTone(void)
 
     for (Tone_index = 0u; Tone_index < 7u; Tone_index++)
     {
-        FOC_Voice_PlayTone(
+        Foc_voice_PlayTone(
             FOC_VOICE_PHASE_A,
             Tone_pitch[Tone_index],
             70u,
@@ -374,7 +396,7 @@ static void Zero_CalibrationSuccessTone(void)
  ************************************************/
 static void Zero_CalibrationFlashTone(void)
 {
-    static const FOC_VoicePitch_t Tone_pitch[7] =
+    static const Foc_voicePitch_t Tone_pitch[7] =
     {
         FOC_VOICE_PITCH_C6,
         FOC_VOICE_PITCH_B5,
@@ -388,7 +410,7 @@ static void Zero_CalibrationFlashTone(void)
 
     for (Tone_index = 0u; Tone_index < 7u; Tone_index++)
     {
-        FOC_Voice_PlayTone(
+        Foc_voice_PlayTone(
             FOC_VOICE_PHASE_A,
             Tone_pitch[Tone_index],
             70u,
@@ -418,7 +440,7 @@ void Zero_Calibration(void)
     uint8 Calib_ok = 0u;
     uint8 Flash_ok = 0u;
 
-    FOC_Voice_Stop();
+    Foc_voice_Stop();
     Motor.Control_mode = MOTOR_CONTROL_OPEN_LOOP;
     Motor.Open_loop.Uq = 0.0f;
     Motor.Open_loop.Step = 0;
@@ -818,18 +840,11 @@ static void Speed_Loop(void)
  ************************************************/
 static void Position_Loop(void)
 {
-    int32 Mechanical_count;
     float Mechanical_degree;
     float Position_error;
 
     /* 位置环使用扣除零偏、修正方向后的机械角，统一映射到0~360度。 */
-    Mechanical_count =
-        ((int32)Motor.Encoder.Mechanical_angle -
-         (int32)Motor.Encoder.Zero_offset) *
-        (int32)Motor.Encoder.Direction;
-    Mechanical_count = (int32)Angle_Wrap(Mechanical_count);
-    Mechanical_degree = (float)Mechanical_count *
-                        360.0f / (float)ANGLE_PERIOD;
+    Mechanical_degree = Motor_Control_GetMechanicalDegree();
     Position_error = Position_ErrorByDirection(
         Motor.Position_loop.Target_degree,
         Mechanical_degree,
@@ -974,6 +989,7 @@ void Motor_Control_SetPositionKp(float Kp,
         OutputLimit,
         0.0f,
         0.0f);
+    /* 位置环只保留比例项，积分器和积分限幅始终清零。 */
     Motor.Position_loop.Pid.Kp = Kp;
     Motor.Position_loop.Pid.Ki = 0.0f;
     Motor.Position_loop.Deadband_degree = Deadband_degree;
@@ -1061,7 +1077,7 @@ void Motor_Control_Loop(void)
             break;
 
         case MOTOR_CONTROL_VOICE:
-            FOC_Voice_Loop();
+            Foc_voice_Loop();
             break;
 
         default:
