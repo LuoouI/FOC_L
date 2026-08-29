@@ -57,6 +57,8 @@ int main(void)
 
     menc15a_init();                     // 磁编码器初始化
 
+    Motor_Flash_Init();                 // 初始化Flash并恢复电机零点参数
+
     Current_Sample_Init();              // 电流采样数据初始化
 
     My_TCPWM_Init();                    // 三相互补PWM及ADC触发源初始化

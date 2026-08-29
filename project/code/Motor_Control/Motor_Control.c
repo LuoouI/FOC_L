@@ -1,6 +1,7 @@
 #include "Motor_Control.h"
 #include "Filter/AB_Filter.h"
 #include "FOC_Voice/FOC_Voice.h"
+#include "Motor_Flash/Motor_Flash.h"
 #include "My_TCPWM/My_TCPWM.h"
 #include "SVPWM/SVPWM.h"
 
@@ -13,11 +14,11 @@ static const ABFilterParam_t RpmFltCfg =
 const Motor_ZeroCalib_t Motor_zeroCalib =
 {
     .Voltage = 2.0f,
-    .Ramp_count = 30u,
+    .Ramp_count = 0u,
     .Ramp_ms = 5u,
     .Hold_ms = 200u,
-    .Step_count = 200u,
-    .Step_ms = 5u,
+    .Step_count = 2000u,
+    .Step_ms = 1u,
     .Sample_count = 10u,
     .Sample_ms = 5u,
     .Min_travel = 1000
@@ -259,6 +260,37 @@ static void Zero_CalibrationSuccessTone(void)
     }
 }
 
+/***********************************************
+ * @brief : 播放Flash保存成功的对称七音降调
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static void Zero_CalibrationFlashTone(void)
+{
+    static const FOC_VoicePitch_t Tone_pitch[7] =
+    {
+        FOC_VOICE_PITCH_C6,
+        FOC_VOICE_PITCH_B5,
+        FOC_VOICE_PITCH_A5,
+        FOC_VOICE_PITCH_G5,
+        FOC_VOICE_PITCH_F5,
+        FOC_VOICE_PITCH_E5,
+        FOC_VOICE_PITCH_D5
+    };
+    uint8 Tone_index;
+
+    for (Tone_index = 0u; Tone_index < 7u; Tone_index++)
+    {
+        FOC_Voice_PlayTone(
+            FOC_VOICE_PHASE_A,
+            Tone_pitch[Tone_index],
+            70u,
+            10u);
+    }
+}
+
 /* 执行桥臂自检及编码器零点校准。 */
 void Zero_Calibration(void)
 {
@@ -279,6 +311,7 @@ void Zero_Calibration(void)
     uint8 Old_pole_pairs = Motor.Pole_pairs;
     int8 Old_direction = Motor.Encoder.Direction;
     uint8 Calib_ok = 0u;
+    uint8 Flash_ok = 0u;
 
     FOC_Voice_Stop();
     Motor.Control_mode = MOTOR_CONTROL_OPEN_LOOP;
@@ -384,10 +417,15 @@ void Zero_Calibration(void)
 
     interrupt_global_enable(Irq_state);
 
-    /* 所有校准状态完成收尾后再播放成功提示音。 */
+    /* 校准成功后保存参数，再依次播放校准和存储成功提示音。 */
     if (Calib_ok != 0u)
     {
+        Flash_ok = Motor_Flash_Save();
         Zero_CalibrationSuccessTone();
+        if (Flash_ok != 0u)
+        {
+            Zero_CalibrationFlashTone();
+        }
     }
 }
 

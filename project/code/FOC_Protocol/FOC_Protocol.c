@@ -339,7 +339,7 @@ static void FOC_Protocol_SendTelemetry(void)
     FOC_Protocol_WriteFloat(&Payload[24], 0.0f);
     FOC_Protocol_WriteFloat(&Payload[28], Current.park.Iq);
     FOC_Protocol_WriteFloat(&Payload[32], SVPWM.VBUS);
-    FOC_Protocol_WriteFloat(&Payload[36], 0.0f);
+    FOC_Protocol_WriteFloat(&Payload[36], (float)Motor.Encoder.Zero_offset);
     FOC_Protocol_WriteFloat(&Payload[40], Mechanical_angle);
     FOC_Protocol_WriteFloat(&Payload[44], Electrical_angle);
     FOC_Protocol_WriteFloat(&Payload[48], 0.0f);
