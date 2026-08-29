@@ -33,6 +33,9 @@
 #define FOC_PROTOCOL_SPEED_RAMP_MAX       (100000.0f) // 速度斜坡速率上限，单位为rpm/s
 #define FOC_PROTOCOL_POSITION_LIMIT_MAX   (30000.0f) // 位置环限幅上限，单位为rpm
 #define FOC_PROTOCOL_POSITION_DEADBAND_MAX (180.0f)  // 位置环角度死区上限，单位为度
+#define FOC_PROTOCOL_POSITION_SOFT_RANGE_MAX (180.0f) // 位置环软化范围上限，单位为度
+#define FOC_PROTOCOL_POSITION_SPEED_DEADBAND_MAX (100.0f) // 到位速度死区上限，单位为rpm
+#define FOC_PROTOCOL_STATUS_MUSIC_PLAYING (0x04u)    // 状态标志中的音乐播放位
 
 /*===========================================================================*/
 /*  FOC-UART流式接收状态                                                      */

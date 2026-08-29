@@ -64,9 +64,19 @@ Foc_motor_t Motor =
     {
         .Pid =
         {
-            .Kp = 0.0f
+            .Kp = 30.0f,
+            .LimMax = 200.0f,
+            .LimMin = -200.0f,
         },
-        .Deadband_degree = 0.0f
+        .Deadband_degree = 8.0f,
+        .Soft_range_degree = 10.0f,
+        .Speed_deadband_rpm = 20.0f,
+        .Travel_degree = 0.0f,
+        .Last_degree = 0.0f,
+        .Last_target_degree = 0.0f,
+        .Return_mode = MOTOR_POSITION_RETURN_SHORTEST,
+        .Track_ready = 0u,
+        .In_deadband = 0u
     },
     .Ab_filter_bandwidth = 50.0f,
     .Pole_pairs = 7u,
@@ -126,17 +136,15 @@ static float Speed_Ramp(float Command_rpm,
 }
 
 /***********************************************
- * @brief : 根据旋转方向计算位置环单向角度误差
+ * @brief : 计算位置环最短有符号角度误差
  * @param : Target_degree 目标机械角度，单位为度
  * @param : Mechanical_degree 当前机械角度，范围0~360度
- * @param : Direction 位置运动方向，取值为+1或-1
- * @return: 按指定方向到达目标所需的角度误差，单位为度
+ * @return: 目标相对当前位置的最短角度误差，范围-180~180度
  * @date  : 2026-08-30
  * @author: L
  ************************************************/
-static float Position_ErrorByDirection(float Target_degree,
-                                       float Mechanical_degree,
-                                       int8 Direction)
+static float Position_GetShortestError(float Target_degree,
+                                       float Mechanical_degree)
 {
     float Error_degree;
 
@@ -150,22 +158,50 @@ static float Position_ErrorByDirection(float Target_degree,
     }
 
     Error_degree = Target_degree - Mechanical_degree;
-    if (Direction >= 0)
+    while (Error_degree > 180.0f)
     {
-        while (Error_degree < 0.0f)
-        {
-            Error_degree += 360.0f;
-        }
+        Error_degree -= 360.0f;
     }
-    else
+    while (Error_degree < -180.0f)
     {
-        while (Error_degree > 0.0f)
-        {
-            Error_degree -= 360.0f;
-        }
+        Error_degree += 360.0f;
     }
 
     return Error_degree;
+}
+
+/***********************************************
+ * @brief : 跟踪相对目标位置的连续偏转并计算原路回正误差
+ * @param : Target_degree 目标机械角度，单位为度
+ * @param : Mechanical_degree 当前机械角度，范围0~360度
+ * @return: 与累计偏转方向相反的回正角度误差，单位为度
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
+static float Position_GetReversePathError(float Target_degree,
+                                          float Mechanical_degree)
+{
+    float Travel_step;
+
+    if ((Motor.Position_loop.Track_ready == 0u) ||
+        (Motor.Position_loop.Last_target_degree != Target_degree))
+    {
+        Motor.Position_loop.Travel_degree =
+            -Position_GetShortestError(Target_degree, Mechanical_degree);
+        Motor.Position_loop.Last_degree = Mechanical_degree;
+        Motor.Position_loop.Last_target_degree = Target_degree;
+        Motor.Position_loop.Track_ready = 1u;
+    }
+    else
+    {
+        Travel_step = Position_GetShortestError(
+            Mechanical_degree,
+            Motor.Position_loop.Last_degree);
+        Motor.Position_loop.Travel_degree += Travel_step;
+        Motor.Position_loop.Last_degree = Mechanical_degree;
+    }
+
+    return -Motor.Position_loop.Travel_degree;
 }
 
 void Angle_Update(void)
@@ -716,6 +752,9 @@ static void EncoderFoc_StopOutput(void)
     Motor.Speed_loop.Iq_output = 0.0f;
     Motor.Position_loop.Target_degree = 0.0f;
     Motor.Position_loop.Speed_output = 0.0f;
+    Motor.Position_loop.Travel_degree = 0.0f;
+    Motor.Position_loop.Track_ready = 0u;
+    Motor.Position_loop.In_deadband = 0u;
     PID_Clear(&Motor.Current_loop.Id_pid);
     PID_Clear(&Motor.Current_loop.Iq_pid);
     PID_Clear(&Motor.Speed_loop.Pid);
@@ -806,6 +845,20 @@ static void Speed_Loop(void)
             Motor.Speed_loop.Ramp_rate);
     }
 
+    /* 位置已到位且转速足够小时关闭交轴电流，避免零速噪声持续激励电机。 */
+    if ((Motor.Foc_mode == MOTOR_FOC_POSITION) &&
+        (Motor.Position_loop.In_deadband != 0u) &&
+        (Motor.Position_loop.Speed_deadband_rpm > 0.0f) &&
+        (fabsf(Motor.Encoder.Spd_rpm) <=
+         Motor.Position_loop.Speed_deadband_rpm))
+    {
+        Motor.Speed_loop.Target_rpm = 0.0f;
+        Motor.Speed_loop.Iq_output = 0.0f;
+        Motor.Current_loop.Iq_target = 0.0f;
+        PID_Clear(&Motor.Speed_loop.Pid);
+        return;
+    }
+
     Iq_limit = Current_GetIqLimit(
         Motor.Current_loop.Id_target,
         MOTOR_CURRENT_VECTOR_LIMIT_A);
@@ -842,24 +895,70 @@ static void Position_Loop(void)
 {
     float Mechanical_degree;
     float Position_error;
+    float Effective_error;
+    float Reverse_path_error;
 
     /* 位置环使用扣除零偏、修正方向后的机械角，统一映射到0~360度。 */
     Mechanical_degree = Motor_Control_GetMechanicalDegree();
-    Position_error = Position_ErrorByDirection(
+    Reverse_path_error = Position_GetReversePathError(
         Motor.Position_loop.Target_degree,
-        Mechanical_degree,
-        Motor.Foc_direction);
+        Mechanical_degree);
+    if (Motor.Position_loop.Return_mode ==
+        MOTOR_POSITION_RETURN_REVERSE_PATH)
+    {
+        Position_error = Reverse_path_error;
+    }
+    else
+    {
+        Position_error = Position_GetShortestError(
+            Motor.Position_loop.Target_degree,
+            Mechanical_degree);
+    }
     if (fabsf(Position_error) <= Motor.Position_loop.Deadband_degree)
     {
+        Motor.Position_loop.In_deadband = 1u;
         Motor.Position_loop.Speed_output = 0.0f;
         Motor.Speed_loop.Target_rpm = 0.0f;
+        if (Motor.Position_loop.Return_mode ==
+            MOTOR_POSITION_RETURN_SHORTEST)
+        {
+            Motor.Position_loop.Travel_degree = 0.0f;
+            Motor.Position_loop.Last_degree = Mechanical_degree;
+            Motor.Position_loop.Last_target_degree =
+                Motor.Position_loop.Target_degree;
+            Motor.Position_loop.Track_ready = 1u;
+        }
         PID_Clear(&Motor.Position_loop.Pid);
         return;
+    }
+    Motor.Position_loop.In_deadband = 0u;
+
+    /* 扣除死区宽度，使速度目标在死区边界从零连续增加。 */
+    if (Position_error > 0.0f)
+    {
+        Effective_error =
+            Position_error - Motor.Position_loop.Deadband_degree;
+    }
+    else
+    {
+        Effective_error =
+            Position_error + Motor.Position_loop.Deadband_degree;
+    }
+
+    /* 到位软化范围内线性恢复位置Kp比例，超出范围后使用完整增益。 */
+    if ((Motor.Position_loop.Soft_range_degree >
+         Motor.Position_loop.Deadband_degree) &&
+        (fabsf(Position_error) < Motor.Position_loop.Soft_range_degree))
+    {
+        Effective_error *=
+            fabsf(Effective_error) /
+            (Motor.Position_loop.Soft_range_degree -
+             Motor.Position_loop.Deadband_degree);
     }
 
     Motor.Position_loop.Speed_output = PID_Update(
         &Motor.Position_loop.Pid,
-        Position_error,
+        Effective_error,
         0.0f);
     Motor.Speed_loop.Target_rpm = Motor.Position_loop.Speed_output;
 }
@@ -934,7 +1033,9 @@ void Motor_Control_Init(void)
     Motor_Control_SetPositionKp(
         Motor.Position_loop.Pid.Kp,
         Motor.Position_loop.Pid.LimMax,
-        Motor.Position_loop.Deadband_degree);
+        Motor.Position_loop.Deadband_degree,
+        Motor.Position_loop.Soft_range_degree,
+        Motor.Position_loop.Speed_deadband_rpm);
 }
 
 void Motor_Control_SetSpeedPi(float Kp,
@@ -966,7 +1067,9 @@ void Motor_Control_SetSpeedPi(float Kp,
 
 void Motor_Control_SetPositionKp(float Kp,
                                  float OutputLimit,
-                                 float Deadband_degree)
+                                 float Deadband_degree,
+                                 float SoftRange_degree,
+                                 float SpeedDeadband_rpm)
 {
     if (OutputLimit < 0.0f)
     {
@@ -981,6 +1084,20 @@ void Motor_Control_SetPositionKp(float Kp,
     {
         Deadband_degree = 180.0f;
     }
+    if ((SoftRange_degree != SoftRange_degree) ||
+        (SoftRange_degree < 0.0f))
+    {
+        SoftRange_degree = 0.0f;
+    }
+    if (SoftRange_degree > 180.0f)
+    {
+        SoftRange_degree = 180.0f;
+    }
+    if ((SpeedDeadband_rpm != SpeedDeadband_rpm) ||
+        (SpeedDeadband_rpm < 0.0f))
+    {
+        SpeedDeadband_rpm = 0.0f;
+    }
     PID_Config(
         &Motor.Position_loop.Pid,
         MOTOR_POSITION_LOOP_TS,
@@ -993,6 +1110,8 @@ void Motor_Control_SetPositionKp(float Kp,
     Motor.Position_loop.Pid.Kp = Kp;
     Motor.Position_loop.Pid.Ki = 0.0f;
     Motor.Position_loop.Deadband_degree = Deadband_degree;
+    Motor.Position_loop.Soft_range_degree = SoftRange_degree;
+    Motor.Position_loop.Speed_deadband_rpm = SpeedDeadband_rpm;
 }
 
 /*===========================================================================*/
@@ -1012,6 +1131,8 @@ void Motor_Control_Loop(void)
     {
         Speed_count = 0u;
         Position_count = 0u;
+        Motor.Position_loop.Track_ready = 0u;
+        Motor.Position_loop.In_deadband = 0u;
         if ((Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC) &&
             (Motor.Foc_mode == MOTOR_FOC_SPEED))
         {

@@ -149,6 +149,10 @@ static void Foc_Protocol_StopControl(void)
     Motor.Speed_loop.Iq_output = 0.0f;
     Motor.Position_loop.Target_degree = 0.0f;
     Motor.Position_loop.Speed_output = 0.0f;
+    Motor.Position_loop.Travel_degree = 0.0f;
+    Motor.Position_loop.Return_mode = MOTOR_POSITION_RETURN_SHORTEST;
+    Motor.Position_loop.Track_ready = 0u;
+    Motor.Position_loop.In_deadband = 0u;
     Motor.Foc_direction = 1;
     PID_Clear(&Motor.Current_loop.Id_pid);
     PID_Clear(&Motor.Current_loop.Iq_pid);
@@ -174,6 +178,8 @@ static void Foc_Protocol_HandleParameterWrite(const uint8 *Payload)
     float Speed_integral_limit = Foc_Protocol_ReadFloat(&Payload[16]);
     float Ab_filter_bandwidth = Foc_Protocol_ReadFloat(&Payload[20]);
     float Position_kp = Foc_Protocol_ReadFloat(&Payload[24]);
+    float Position_soft_range = Foc_Protocol_ReadFloat(&Payload[28]);
+    float Position_speed_deadband = Foc_Protocol_ReadFloat(&Payload[32]);
     float Position_output_limit = Foc_Protocol_ReadFloat(&Payload[36]);
     float Position_deadband = Foc_Protocol_ReadFloat(&Payload[40]);
 
@@ -189,6 +195,8 @@ static void Foc_Protocol_HandleParameterWrite(const uint8 *Payload)
         (Speed_integral_limit != Speed_integral_limit) ||
         (Ab_filter_bandwidth != Ab_filter_bandwidth) ||
         (Position_kp != Position_kp) ||
+        (Position_soft_range != Position_soft_range) ||
+        (Position_speed_deadband != Position_speed_deadband) ||
         (Position_output_limit != Position_output_limit) ||
         (Position_deadband != Position_deadband) ||
         (Speed_kp < 0.0f) ||
@@ -201,6 +209,11 @@ static void Foc_Protocol_HandleParameterWrite(const uint8 *Payload)
         (Ab_filter_bandwidth > MOTOR_AB_FILTER_BW_MAX_HZ) ||
         (Position_kp < 0.0f) ||
         (Position_kp > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
+        (Position_soft_range < 0.0f) ||
+        (Position_soft_range > FOC_PROTOCOL_POSITION_SOFT_RANGE_MAX) ||
+        (Position_speed_deadband < 0.0f) ||
+        (Position_speed_deadband >
+         FOC_PROTOCOL_POSITION_SPEED_DEADBAND_MAX) ||
         (Position_output_limit < 0.0f) ||
         (Position_output_limit > FOC_PROTOCOL_POSITION_LIMIT_MAX) ||
         (Position_deadband < 0.0f) ||
@@ -214,7 +227,9 @@ static void Foc_Protocol_HandleParameterWrite(const uint8 *Payload)
     Motor_Control_SetSpeedPi(Speed_kp, Speed_ki, Speed_integral_limit);
     Motor_Control_SetPositionKp(Position_kp,
                                 Position_output_limit,
-                                Position_deadband);
+                                Position_deadband,
+                                Position_soft_range,
+                                Position_speed_deadband);
     Motor.Ab_filter_bandwidth = Ab_filter_bandwidth;
     Protocol.Parameters_seen = 1u;
     Foc_Protocol_SendLoopParameters();
@@ -249,9 +264,12 @@ static void Foc_Protocol_SendLoopParameters(void)
     Foc_Protocol_WriteFloat(&Payload[16], Motor.Speed_loop.Integral_limit);
     Foc_Protocol_WriteFloat(&Payload[20], Motor.Ab_filter_bandwidth);
     Foc_Protocol_WriteFloat(&Payload[24], Motor.Position_loop.Pid.Kp);
-    /* 位置环固定为纯Kp，保留字段回传0以维持旧帧长度。 */
-    Foc_Protocol_WriteFloat(&Payload[28], 0.0f);
-    Foc_Protocol_WriteFloat(&Payload[32], 0.0f);
+    Foc_Protocol_WriteFloat(
+        &Payload[28],
+        Motor.Position_loop.Soft_range_degree);
+    Foc_Protocol_WriteFloat(
+        &Payload[32],
+        Motor.Position_loop.Speed_deadband_rpm);
     Foc_Protocol_WriteFloat(&Payload[36], Motor.Position_loop.Pid.LimMax);
     Foc_Protocol_WriteFloat(&Payload[40], Motor.Position_loop.Deadband_degree);
     Crc = Foc_Protocol_Crc16(&Frame[2],
@@ -336,6 +354,10 @@ static void Foc_Protocol_HandleEncoderFoc(const uint8 *Payload)
     {
         Motor.Position_loop.Target_degree =
             Float_Limit(Primary_target, 0.0f, 360.0f);
+        Motor.Position_loop.Return_mode =
+            ((Flags & 0x02u) != 0u) ?
+            MOTOR_POSITION_RETURN_REVERSE_PATH :
+            MOTOR_POSITION_RETURN_SHORTEST;
         Motor.Current_loop.Iq_target = 0.0f;
     }
     Motor.Foc_mode = (Motor_foc_mode_t)Foc_mode;
@@ -548,6 +570,10 @@ static void Foc_Protocol_SendTelemetry(void)
     if (Protocol.Enabled != 0u)
     {
         Payload[3] |= 0x01u;
+    }
+    if (Foc_voice_IsPlaying() != 0u)
+    {
+        Payload[3] |= FOC_PROTOCOL_STATUS_MUSIC_PLAYING;
     }
     Foc_Protocol_WriteU32(&Payload[4], Protocol.Time_ms);
     Foc_Protocol_WriteFloat(&Payload[8], Speed_target);

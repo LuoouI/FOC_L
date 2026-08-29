@@ -26,12 +26,10 @@ void Motor_Torque_Estimate(float Iq)
         Torque.Kt = 0.0f;
         Torque.Motor_torque = 0.0f;
         Torque.Ready = 0u;
-        return 0.0f;
     }
 
     Torque.Kt = 60.0f / (TWO_PI * Torque.Kv);
     Torque.Motor_torque = Torque.Kt * Iq * Torque.Gear_ratio;
     Torque.Ready = 1u;
 
-    return Torque.Motor_torque;
 }

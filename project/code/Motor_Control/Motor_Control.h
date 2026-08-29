@@ -62,6 +62,15 @@ typedef enum
 } Motor_foc_mode_t;
 
 /*===========================================================================*/
+/*  位置环回正方式                                                            */
+/*===========================================================================*/
+typedef enum
+{
+    MOTOR_POSITION_RETURN_SHORTEST = 0,          // 按最近距离回正
+    MOTOR_POSITION_RETURN_REVERSE_PATH           // 沿偏转路径的反方向原路回正
+} Motor_position_return_mode_t;
+
+/*===========================================================================*/
 /*  编码器配置及角度反馈                                                      */
 /*===========================================================================*/
 typedef struct
@@ -132,6 +141,14 @@ typedef struct
     PID_t Pid;                                  // 位置纯Kp调节器，输出为速度目标
     float Speed_output;                         // 位置环输出，单位为rpm
     float Deadband_degree;                      // 位置角度死区，单位为度
+    float Soft_range_degree;                    // 到位线性软化范围，单位为度
+    float Speed_deadband_rpm;                   // 到位速度死区，单位为rpm
+    float Travel_degree;                        // 相对目标位置的连续偏转角度，单位为度
+    float Last_degree;                          // 上次位置环采样角度，单位为度
+    float Last_target_degree;                   // 上次跟踪的位置目标，单位为度
+    Motor_position_return_mode_t Return_mode;   // 位置环回正方式
+    uint8 Track_ready;                          // 连续偏转角度跟踪有效标志
+    uint8 In_deadband;                          // 位置误差已进入角度死区标志
 } Foc_PositionLoop_t;
 
 /*===========================================================================*/
@@ -200,17 +217,21 @@ void Motor_Control_SetSpeedPi(float Kp,
                               float IntegralLimit);
 
 /***********************************************
- * @brief : 更新位置环纯Kp参数、输出限幅和角度死区
+ * @brief : 更新位置环纯Kp、限幅、死区及到位软化参数
  * @param : Kp 比例增益
  * @param : OutputLimit 输出限幅，单位为rpm
  * @param : Deadband_degree 角度死区，单位为度
+ * @param : SoftRange_degree 到位线性软化范围，单位为度，不大于角度死区时关闭
+ * @param : SpeedDeadband_rpm 到位速度死区，单位为rpm，填0时关闭
  * @return: 无
  * @date  : 2026-08-30
  * @author: L
  ************************************************/
 void Motor_Control_SetPositionKp(float Kp,
                                  float OutputLimit,
-                                 float Deadband_degree);
+                                 float Deadband_degree,
+                                 float SoftRange_degree,
+                                 float SpeedDeadband_rpm);
 
 /***********************************************
  * @brief : 更新电机机械角度和电角度
