@@ -68,7 +68,7 @@ typedef struct
 } Foc_Protocol_t;
 
 /***********************************************
- * @brief : 初始化FOC-UART协议状态，复用调试串口115200 bit/s
+ * @brief : 初始化调试串口及FOC-UART协议状态
  * @param : 无
  * @return: 无
  * @date  : 2026-08-28

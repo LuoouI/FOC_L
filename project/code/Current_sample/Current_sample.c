@@ -53,19 +53,6 @@ void Current_Sample_Init(void)
     Current.adc_raw_u = 0u;
     Current.adc_raw_v = 0u;
     Current.adc_raw_w = 0u;
-    Current.offset_u = 0u;
-    Current.offset_v = 0u;
-    Current.offset_w = 0u;
-    Current.adc_cal_u = 0;
-    Current.adc_cal_v = 0;
-    Current.adc_cal_w = 0;
-    Current.current_u = 0.0f;
-    Current.current_v = 0.0f;
-    Current.current_w = 0.0f;
-    Current.clark = (Clark_t){0.0f, 0.0f};
-    Current.park = (Park_t){0.0f, 0.0f};
-    Current.calibrated = 0u;
-    Current.sample_ready = 0u;
 
     Current_Sample_StartCalibration();
 }

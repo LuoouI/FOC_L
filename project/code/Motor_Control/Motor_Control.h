@@ -6,37 +6,39 @@
 #include "PID/PID.h"
 #include "Function/Function.h"
 
-#define MOTOR_CURRENT_LOOP_HZ           (20000u)   // 电流环执行频率，单位为Hz
-#define MOTOR_SPEED_LOOP_HZ             (1000u)    // 速度环执行频率，单位为Hz
-#define MOTOR_POSITION_LOOP_HZ          (500u)     // 位置环执行频率，单位为Hz
+#define MOTOR_CURRENT_LOOP_HZ           (20000u)        // 电流环执行频率，单位为Hz
+#define MOTOR_SPEED_LOOP_HZ             (1000u)         // 速度环执行频率，单位为Hz
+#define MOTOR_POSITION_LOOP_HZ          (500u)          // 位置环执行频率，单位为Hz
+
 #define MOTOR_SPEED_LOOP_DIVIDER        \
-    (MOTOR_CURRENT_LOOP_HZ / MOTOR_SPEED_LOOP_HZ)  // 速度环相对电流环的分频系数
+    (MOTOR_CURRENT_LOOP_HZ / MOTOR_SPEED_LOOP_HZ)       // 速度环相对电流环的分频系数
 #define MOTOR_POSITION_LOOP_DIVIDER     \
-    (MOTOR_CURRENT_LOOP_HZ / MOTOR_POSITION_LOOP_HZ) // 位置环相对电流环的分频系数
+    (MOTOR_CURRENT_LOOP_HZ / MOTOR_POSITION_LOOP_HZ)    // 位置环相对电流环的分频系数
 #define MOTOR_CURRENT_LOOP_TS           \
-    (1.0f / (float)MOTOR_CURRENT_LOOP_HZ)          // 电流环采样周期，单位为秒
+    (1.0f / (float)MOTOR_CURRENT_LOOP_HZ)               // 电流环采样周期，单位为秒
 #define MOTOR_SPEED_LOOP_TS             \
-    (1.0f / (float)MOTOR_SPEED_LOOP_HZ)            // 速度环采样周期，单位为秒
+    (1.0f / (float)MOTOR_SPEED_LOOP_HZ)                 // 速度环采样周期，单位为秒
 #define MOTOR_POSITION_LOOP_TS          \
-    (1.0f / (float)MOTOR_POSITION_LOOP_HZ)         // 位置环采样周期，单位为秒
-#define MOTOR_CURRENT_VECTOR_LIMIT_A    (10.0f)      // d/q轴电流矢量固定限幅，单位为A
-#define MOTOR_AB_FILTER_BW_MIN_HZ        (1.0f)      // AB滤波器带宽下限，单位为Hz
-#define MOTOR_AB_FILTER_BW_MAX_HZ        (500.0f)    // AB滤波器带宽上限，单位为Hz
+    (1.0f / (float)MOTOR_POSITION_LOOP_HZ)              // 位置环采样周期，单位为秒
+
+#define MOTOR_CURRENT_VECTOR_LIMIT_A    (10.0f)         // d/q轴电流矢量固定限幅，单位为A
+#define MOTOR_AB_FILTER_BW_MIN_HZ        (1.0f)         // AB滤波器带宽下限，单位为Hz
+#define MOTOR_AB_FILTER_BW_MAX_HZ        (500.0f)       // AB滤波器带宽上限，单位为Hz
 
 /*===========================================================================*/
 /*  电机零点校准参数                                                          */
 /*===========================================================================*/
 typedef struct
 {
-    float  Voltage;                      // 零点校准d轴电压
-    uint16 Ramp_count;                   // 校准锁定电压渐升步数
-    uint16 Ramp_ms;                      // 校准锁定电压渐升步间隔
-    uint16 Hold_ms;                      // 校准起始定位保持时间
-    uint16 Step_count;                   // 零点牵引步数
-    uint16 Step_ms;                      // 零点牵引步间隔
-    uint16 Sample_count;                 // 零点位置平均采样次数
-    uint16 Sample_ms;                    // 零点位置采样间隔
-    int32  Min_travel;                   // 判定编码器有效的最小累计行程
+    float  Voltage;                            // 零点校准d轴电压
+    uint16 Ramp_count;                         // 校准锁定电压渐升步数
+    uint16 Ramp_ms;                            // 校准锁定电压渐升步间隔
+    uint16 Hold_ms;                            // 校准起始定位保持时间
+    uint16 Step_count;                         // 零点牵引步数
+    uint16 Step_ms;                            // 零点牵引步间隔
+    uint16 Sample_count;                       // 零点位置平均采样次数
+    uint16 Sample_ms;                          // 零点位置采样间隔
+    int32  Min_travel;                         // 判定编码器有效的最小累计行程
 } Motor_ZeroCalib_t;
 
 extern const Motor_ZeroCalib_t Motor_zeroCalib;
@@ -46,9 +48,10 @@ extern const Motor_ZeroCalib_t Motor_zeroCalib;
 /*===========================================================================*/
 typedef enum
 {
-    MOTOR_CONTROL_OPEN_LOOP = 0,                // 开环电压矢量控制
-    MOTOR_CONTROL_ENCODER_FOC,                  // 磁编码器电压矢量控制
-    MOTOR_CONTROL_VOICE                         // 电机音乐播放控制
+    MOTOR_CONTROL_OPEN_LOOP = 0,               // 开环电压矢量控制
+    MOTOR_CONTROL_ENCODER_FOC,                 // 有感FOC
+    MOTOR_CONTROL_SENSORLESS_FOC,              // 无感FOC
+    MOTOR_CONTROL_VOICE                        // 电机音乐播放控制
 } Motor_control_mode_t;
 
 /*===========================================================================*/
@@ -56,9 +59,9 @@ typedef enum
 /*===========================================================================*/
 typedef enum
 {
-    MOTOR_FOC_CURRENT = 1,                       // 电流环控制
-    MOTOR_FOC_SPEED,                             // 速度环级联电流环
-    MOTOR_FOC_POSITION                           // 位置环级联速度环和电流环
+    MOTOR_FOC_CURRENT = 1,                      // 电流环控制
+    MOTOR_FOC_SPEED,                            // 速度环级联电流环
+    MOTOR_FOC_POSITION                          // 位置环级联速度环和电流环
 } Motor_foc_mode_t;
 
 /*===========================================================================*/
@@ -66,8 +69,8 @@ typedef enum
 /*===========================================================================*/
 typedef enum
 {
-    MOTOR_POSITION_RETURN_SHORTEST = 0,          // 按最近距离回正
-    MOTOR_POSITION_RETURN_REVERSE_PATH           // 沿偏转路径的反方向原路回正
+    MOTOR_POSITION_RETURN_SHORTEST = 0,         // 按最近距离回正
+    MOTOR_POSITION_RETURN_REVERSE_PATH          // 沿偏转路径的反方向原路回正
 } Motor_position_return_mode_t;
 
 /*===========================================================================*/
@@ -167,7 +170,7 @@ typedef struct
     uint8 Pole_pairs;                           // 电机极对数
     Motor_control_mode_t Control_mode;          // 当前电机控制模式
     Motor_foc_mode_t Foc_mode;                  // 当前有感FOC子模式
-    int8 Foc_direction;                          // 有感FOC目标方向，取值为+1或-1
+    int8 Foc_direction;                         // 有感FOC目标方向，取值为+1或-1
     uint8 Zero_ready;                           // 编码器零点参数有效标志
 } Foc_motor_t;
 
@@ -177,13 +180,13 @@ typedef struct
 /*===========================================================================*/
 typedef struct
 {
-    Foc_motor_t motor;                            // 电机控制对象
-    uint8 ready;                                  // 校准就绪标志
-    uint8 calibrating;                            // 校准进行中标志
+    Foc_motor_t motor;                           // 电机控制对象
+    uint8 ready;                                 // 校准就绪标志
+    uint8 calibrating;                           // 校准进行中标志
 
 } Motor_Control_t;
 
-extern Foc_motor_t Motor;                // 电机控制对象
+extern Foc_motor_t Motor;                        // 电机控制对象
 
 /***********************************************
  * @brief : 使用Motor中的参数初始化FOC电流环、速度环和位置环

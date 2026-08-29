@@ -49,32 +49,22 @@ int main(void)
 {
     clock_init(SYSTEM_CLOCK_160M);      // 时钟配置及系统初始化<务必保留>
     
-    debug_init();                       // 调试串口初始化
-
-    Motor_Control_Init();               // 初始化FOC控制环默认参数
-
-    Foc_Protocol_Init();                // 初始化上位机开环控制协议
-   
-    key_init(10);                       // 按键初始化
-
-    menc15a_init();                     // 磁编码器初始化
-
-    Motor_Flash_Init();                 // 初始化Flash并恢复电机零点参数
-
-    Current_Sample_Init();              // 电流采样数据初始化
-
-    My_TCPWM_Init();                    // 三相互补PWM及ADC触发源初始化
-
-    My_ADC_Current_Init();              // ADC初始化及硬件触发接收配置
+    Foc_Protocol_Init();                // 初始化调试串口及上位机协议
 
     My_LED_Init();                      // LED初始化
 
-    My_ADC_Voltage_Init();              // 电压采样初始化 
+    Motor_Control_Init();               // 初始化编码器及FOC控制参数
 
-    My_TCPWM_Start();                   // 启动三相PWM
+    Motor_Flash_Init();                 // 初始化Flash并恢复电机零点参数
+
+    My_TCPWM_Init();                    // 三相互补PWM及ADC触发源初始化
+
+    My_ADC_Init();                      // 初始化电流采样及母线电压ADC
 
     pit_ms_init(PIT_CH2, 1);            // 1ms  
     pit_ms_init(PIT_CH11,10);           // 10ms  
+
+    My_TCPWM_Start();                   // 所有模块就绪后启动PWM及ADC触发
 
     // 此处编写用户代码 例如外设初始化代码等
     for(;;)

@@ -808,6 +808,7 @@ static void Foc_Protocol_ParseByte(uint8 Data)
 
 void Foc_Protocol_Init(void)
 {
+    debug_init();
     memset(&Protocol, 0, sizeof(Protocol));
 }
 

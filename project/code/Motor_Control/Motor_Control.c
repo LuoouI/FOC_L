@@ -1002,6 +1002,8 @@ void Motor_Control_Init(void)
 {
     float Voltage_limit;
 
+    (void)menc15a_init();
+
     Motor_Control_SetCurrentBandwidth(Motor.Current_loop.Bandwidth);
 
     Voltage_limit = SVPWM.DQ_Limit;

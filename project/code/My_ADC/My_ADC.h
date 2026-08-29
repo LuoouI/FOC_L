@@ -10,7 +10,6 @@
 
 #define ADC_REF_VOLTAGE                   (3.3f)       // ADC参考电压
 #define ADC_MAX_VALUE                     (4095.0f)    // 12位ADC最大采样值
-#define ADC_VOLTAGE_FILTER_WINDOW_SIZE    (16u)        // 母线电压滤波窗口长度
 #define BATTERY_DIVIDER_RATIO             (11.0f)      // 母线电压分压还原系数
 #define BATTERY_VOLTAGE_CALIBRATION       (1.0f)       // 母线电压校准系数
 
@@ -36,22 +35,13 @@ typedef struct
 } AdcChannel_t;
 
 /***********************************************
- * @brief : 初始化SAR ADC和模拟输入引脚
+ * @brief : 初始化电流采样数据、电流ADC和母线电压ADC
  * @param : /
  * @return: void
- * @date  : 2026-08-15
+ * @date  : 2026-08-30
  * @author: L
  ************************************************/
-void My_ADC_Current_Init(void);
-
-/***********************************************
- * @brief : 初始化母线电压检测ADC通道
- * @param : /
- * @return: void
- * @date  : 2026-08-16
- * @author: L
- ************************************************/
-void My_ADC_Voltage_Init(void);
+void My_ADC_Init(void);
 
 /***********************************************
  * @brief : 采样并获取电压检测通道原始值

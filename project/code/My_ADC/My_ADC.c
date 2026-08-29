@@ -1,12 +1,8 @@
 #include "My_ADC.h"
 #include "Current_sample/Current_sample.h"
 #include "Motor_Control/Motor_Control.h"
-#include "Filter/Sliding_Filter.h"
 #include "adc/cy_adc.h"
 #include "trigmux/cy_trigmux.h"
-
-static Sliding_Filter_t BatteryFilter;
-static float BatteryFilterBuffer[ADC_VOLTAGE_FILTER_WINDOW_SIZE];
 
 /*===========================================================================*/
 /*  两路电流ADC硬件描述                                                       */
@@ -351,7 +347,14 @@ static void My_ADC_Trigger_Init(void)
     }
 }
 
-void My_ADC_Current_Init(void)
+/***********************************************
+ * @brief : 初始化两路电流ADC及硬件触发中断
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
+static void My_ADC_CurrentHardware_Init(void)
 {
     uint32 ChannelIndex;
 
@@ -372,13 +375,23 @@ void My_ADC_Current_Init(void)
     My_ADC_Interrupt_Init();
 }
 
-void My_ADC_Voltage_Init(void)
+/***********************************************
+ * @brief : 初始化母线电压ADC
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
+static void My_ADC_VoltageHardware_Init(void)
 {
     adc_init(ADC_V_PIN, ADC_12BIT);
-    Sliding_Filter_Init(
-        &BatteryFilter,
-        BatteryFilterBuffer,
-        ADC_VOLTAGE_FILTER_WINDOW_SIZE);
+}
+
+void My_ADC_Init(void)
+{
+    Current_Sample_Init();
+    My_ADC_VoltageHardware_Init();
+    My_ADC_CurrentHardware_Init();
 }
 
 uint16 My_ADC_GetBatteryRawValue(void)
@@ -389,14 +402,10 @@ uint16 My_ADC_GetBatteryRawValue(void)
 float My_ADC_GetBatteryVoltage(void)
 {
     uint16 BatteryRaw;
-    uint16 BatteryFilteredRaw;
     float BatteryVoltage;
 
     BatteryRaw = My_ADC_GetBatteryRawValue();
-    Sliding_Filter_Update(&BatteryFilter, (float)BatteryRaw);
-    BatteryFilteredRaw = Sliding_Filter_GetTrimmedUint16(&BatteryFilter);
-
-    BatteryVoltage = (float)BatteryFilteredRaw * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
+    BatteryVoltage = (float)BatteryRaw * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
     BatteryVoltage *= BATTERY_DIVIDER_RATIO * BATTERY_VOLTAGE_CALIBRATION;
 
     return BatteryVoltage;
