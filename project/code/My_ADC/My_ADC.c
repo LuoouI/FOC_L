@@ -13,6 +13,7 @@ static float BatteryFilterBuffer[ADC_VOLTAGE_FILTER_WINDOW_SIZE];
 /*===========================================================================*/
 static const AdcChannel_t AdcChannels[] =
 {
+    /* W相电流采样通道 */
     {
         PASS0_SAR2,
         PASS0_SAR2_CH0,
@@ -23,6 +24,7 @@ static const AdcChannel_t AdcChannels[] =
         P18_0_AMUXA,
         pass_0_interrupts_sar_64_IRQn
     },
+    /* U相电流采样通道 */
     {
         PASS0_SAR0,
         PASS0_SAR0_CH9,
@@ -197,8 +199,8 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
 {
     static volatile uint8 Adc1SampleDone = 0u;
     static volatile uint8 Adc2SampleDone = 0u;
+    static uint16 AdcLastRawW = 0u;
     static uint16 AdcLastRawU = 0u;
-    static uint16 AdcLastRawV = 0u;
     cy_stc_adc_interrupt_source_t InterruptStatus = {0};
     bool IsFirstInterrupt;
     bool BothGroupDoneAtEntry = false;
@@ -233,12 +235,12 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
 
     if (ChannelIndex == 0u)
     {
-        AdcLastRawU = My_ADC_ReadResult(&AdcChannels[0], AdcLastRawU);
+        AdcLastRawW = My_ADC_ReadResult(&AdcChannels[0], AdcLastRawW);
         Adc1SampleDone = 1u;
     }
     else
     {
-        AdcLastRawV = My_ADC_ReadResult(&AdcChannels[1], AdcLastRawV);
+        AdcLastRawU = My_ADC_ReadResult(&AdcChannels[1], AdcLastRawU);
         Adc2SampleDone = 1u;
     }
 
@@ -251,7 +253,7 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
         Adc1SampleDone = 0u;
         Adc2SampleDone = 0u;
 
-        Current_Sample_Update(AdcLastRawU, AdcLastRawV);
+        Current_Sample_Update(AdcLastRawU, AdcLastRawW);
         Angle_Update();
         Current_Sample_Transform(Motor.Encoder.Electrical_angle);
         Motor_Control_Loop();

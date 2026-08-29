@@ -181,6 +181,98 @@ float PID_Update(PID_t *Pid, float Setpoint, float Measurement)
     return Pid->OUT;
 }
 
+void PID_SetBandwidth(PID_t *Pid,
+                      uint16 BandwidthHz,
+                      float InductanceMh,
+                      float ResistanceOhm)
+{
+    float Omega;
+
+    if ((Pid == NULL) ||
+        (InductanceMh != InductanceMh) ||
+        (ResistanceOhm != ResistanceOhm) ||
+        (InductanceMh <= 0.0f) ||
+        (ResistanceOhm <= 0.0f))
+    {
+        return;
+    }
+
+    if (BandwidthHz < PID_BANDWIDTH_MIN_HZ)
+    {
+        BandwidthHz = PID_BANDWIDTH_MIN_HZ;
+    }
+    else if (BandwidthHz > PID_BANDWIDTH_MAX_HZ)
+    {
+        BandwidthHz = PID_BANDWIDTH_MAX_HZ;
+    }
+    Omega = TWO_PI * (float)BandwidthHz;
+    Pid->Kp = Omega * InductanceMh / 1000.0f;
+    Pid->Ki = Omega * ResistanceOhm;
+}
+
+void PID_SetIntegralLimit(PID_t *Pid, float IntegralLimit)
+{
+    if (Pid == NULL)
+    {
+        return;
+    }
+
+    if ((IntegralLimit != IntegralLimit) ||
+        (IntegralLimit > FLT_MAX) ||
+        (IntegralLimit < -FLT_MAX))
+    {
+        IntegralLimit = 0.0f;
+    }
+    else if (IntegralLimit < 0.0f)
+    {
+        IntegralLimit = -IntegralLimit;
+    }
+
+    Pid->LimMinInt = -IntegralLimit;
+    Pid->LimMaxInt = IntegralLimit;
+    PID_LimitIntegrator(Pid);
+    Pid->I_Out = Pid->Integrator;
+    if (Pid->Ki != 0.0f)
+    {
+        Pid->Ek_sum = Pid->Integrator / Pid->Ki;
+    }
+    else
+    {
+        Pid->Ek_sum = 0.0f;
+    }
+}
+
+void PID_BackCalculation(PID_t *Pid, float ActualOutput)
+{
+    float SampleTime;
+    float TrackingGain;
+
+    if ((Pid == NULL) || (Pid->Kp == 0.0f) || (Pid->Ki == 0.0f))
+    {
+        return;
+    }
+
+    TrackingGain = Pid->Ki / Pid->Kp;
+    if (TrackingGain <= 0.0f)
+    {
+        return;
+    }
+
+    SampleTime = Pid->T;
+    if (SampleTime <= 0.0f)
+    {
+        SampleTime = FOC_TS;
+    }
+
+    /* 以Kp/Ki作为跟踪时间常数，使积分器回跟执行器实际输出。 */
+    Pid->Integrator +=
+        TrackingGain * (ActualOutput - Pid->OUT) * SampleTime;
+    PID_LimitIntegrator(Pid);
+
+    Pid->I_Out = Pid->Integrator;
+    Pid->Ek_sum = Pid->Integrator / Pid->Ki;
+}
+
 float PID_Calc(PID_t *Pid, float Ref, float Fbk, float IntegralLimit)
 {
     if (Pid == NULL)

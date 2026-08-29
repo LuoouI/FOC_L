@@ -4,25 +4,13 @@
 #include "zf_common_headfile.h"
 #include "Function/Function.h"
 
-/*
- * 本模块中的梯形积分、测量值微分和微分低通算法参考以下项目：
- * https://github.com/pms67/PID
- * 参考项目采用MIT许可证，版权所有（c）2020 Philip Salmony。
- */
-
 #define LD   (0.031036f)               // d轴电感，单位为mH
 #define LQ   (0.035016f)               // q轴电感，单位为mH
 #define RS   (0.28659f)                // 定子电阻，单位为欧姆
 #define FOC_TS (1.0f / 20000.0f)       // 电流环采样周期，单位为秒
 
-#define BW_HZ (1000.0f)                 // 电流环带宽，单位为Hz
-#define OMEGA_C (2.0f * PI * BW_HZ)    // 电流环目标角频率，单位为rad/s
-
-/* 电流环连续时间参数：积分项在计算时再乘以采样周期。 */
-#define KP_D_BASIC (float)(OMEGA_C * LD / 1000.0f)  // d轴比例增益
-#define KI_D_BASIC (float)(OMEGA_C * RS)             // d轴积分增益
-#define KP_Q_BASIC (float)(OMEGA_C * LQ / 1000.0f)  // q轴比例增益
-#define KI_Q_BASIC (float)(OMEGA_C * RS)             // q轴积分增益
+#define PID_BANDWIDTH_MIN_HZ (1u)       // 电流环带宽下限，单位为Hz
+#define PID_BANDWIDTH_MAX_HZ (5000u)    // 电流环带宽上限，单位为Hz
 
 /*===========================================================================*/
 /*  PID控制器                                                                */
@@ -105,6 +93,41 @@ void PID_Clear(PID_t *Pid);
  * @author: L
  ************************************************/
 float PID_Update(PID_t *Pid, float Setpoint, float Measurement);
+
+/***********************************************
+ * @brief : 根据电流环带宽和电机参数计算PI增益
+ * @param : Pid PID控制器对象
+ * @param : BandwidthHz 目标带宽，单位为Hz
+ * @param : InductanceMh 电感，单位为mH
+ * @param : ResistanceOhm 定子电阻，单位为欧姆
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+void PID_SetBandwidth(PID_t *Pid,
+                      uint16 BandwidthHz,
+                      float InductanceMh,
+                      float ResistanceOhm);
+
+/***********************************************
+ * @brief : 设置PID积分项对称限幅并约束当前积分状态
+ * @param : Pid PID控制器对象
+ * @param : IntegralLimit 积分项输出绝对限幅
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+void PID_SetIntegralLimit(PID_t *Pid, float IntegralLimit);
+
+/***********************************************
+ * @brief : 根据执行器实际输出对PID积分器进行反算抗饱和
+ * @param : Pid PID控制器对象
+ * @param : ActualOutput 执行器经过限幅后的实际输出
+ * @return: 无，修正结果在下一控制周期生效
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+void PID_BackCalculation(PID_t *Pid, float ActualOutput);
 
 /***********************************************
  * @brief : 兼容旧接口的PID计算函数，积分项输出限幅为正负IntegralLimit

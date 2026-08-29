@@ -228,7 +228,10 @@ static void TCPWM_SinglePhase_Init(const TCPWM_PHASE_t *phase)
  ************************************************/
 static uint32 TCPWM_DutyToCompare(uint16 Duty)
 {
-    Duty = (uint16)Int_Limit((int32)Duty, 0, (int32)TCPWM_DUTY_MAX);
+    Duty = (uint16)Int_Limit(
+        (int32)Duty,
+        0,
+        (int32)TCPWM_DUTY_OUTPUT_LIMIT);
 
     return TCPWM_PERIOD -
            ((uint32)TCPWM_PERIOD * Duty / TCPWM_DUTY_MAX);

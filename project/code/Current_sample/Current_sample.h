@@ -16,16 +16,16 @@
 typedef struct
 {
     uint16 adc_raw_u;       // U相ADC原始采样值
-    uint16 adc_raw_v;       // V相ADC原始采样值
-    uint16 adc_raw_w;       // W相ADC原始采样值，当前两电阻采样硬件无独立通道
+    uint16 adc_raw_v;       // V相ADC原始采样值，当前两电阻采样硬件无独立通道
+    uint16 adc_raw_w;       // W相ADC原始采样值
 
     uint16 offset_u;        // U相ADC零偏
-    uint16 offset_v;        // V相ADC零偏
-    uint16 offset_w;        // W相ADC零偏，当前两电阻采样硬件为零
+    uint16 offset_v;        // V相ADC零偏，当前两电阻采样硬件为零
+    uint16 offset_w;        // W相ADC零偏
 
     int16 adc_cal_u;        // U相原始采样扣除零偏后的ADC值
-    int16 adc_cal_v;        // V相原始采样扣除零偏后的ADC值
-    int16 adc_cal_w;        // W相由U、V相电流重构的ADC值
+    int16 adc_cal_v;        // V相由U、W相电流重构的ADC值
+    int16 adc_cal_w;        // W相原始采样扣除零偏后的ADC值
 
     float current_u;        // U相电流，单位为安培
     float current_v;        // V相电流，单位为安培
@@ -61,12 +61,12 @@ void Current_Sample_StartCalibration(void);
 /***********************************************
  * @brief : 更新一组三相电流采样数据
  * @param : AdcRawU U相ADC原始采样值
- * @param : AdcRawV V相ADC原始采样值
+ * @param : AdcRawW W相ADC原始采样值
  * @return: void
- * @date  : 2026-08-17
+ * @date  : 2026-08-29
  * @author: L
  ************************************************/
-void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawV);
+void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawW);
 
 /***********************************************
  * @brief : 根据当前三相电流和电角度更新Clark、Park变换结果

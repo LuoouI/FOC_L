@@ -5,6 +5,7 @@
 #include "SVPWM/SVPWM.h"
 
 static FOC_Protocol_t Protocol;
+static void FOC_Protocol_SendLoopParameters(void);
 
 /***********************************************
  * @brief : 读取小端序16位无符号整数
@@ -140,7 +141,188 @@ static void FOC_Protocol_StopControl(void)
     Motor.Open_loop.Step = 0;
     Motor.Open_loop.Hold_count = 0u;
     Motor.Open_loop.Started = 0u;
+    Motor.Current_loop.Id_target = 0.0f;
+    Motor.Current_loop.Iq_target = 0.0f;
+    Motor.Speed_loop.Target_rpm = 0.0f;
+    Motor.Speed_loop.Iq_output = 0.0f;
+    Motor.Position_loop.Target_degree = 0.0f;
+    Motor.Position_loop.Speed_output = 0.0f;
+    Motor.Foc_direction = 1;
+    PID_Clear(&Motor.Current_loop.Id_pid);
+    PID_Clear(&Motor.Current_loop.Iq_pid);
+    PID_Clear(&Motor.Speed_loop.Pid);
+    PID_Clear(&Motor.Position_loop.Pid);
     Protocol.Enabled = 0u;
+    Protocol.Voice_selected = 0u;
+}
+
+/***********************************************
+ * @brief : 校验并应用上位机下发的FOC环路参数
+ * @param : Payload 44字节参数写入负载
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static void FOC_Protocol_HandleParameterWrite(const uint8 *Payload)
+{
+    Motor_LoopParameters_t Parameters;
+
+    Parameters.Current_bandwidth = FOC_Protocol_ReadU16(&Payload[0]);
+    Parameters.Speed_kp = FOC_Protocol_ReadFloat(&Payload[8]);
+    Parameters.Speed_ki = FOC_Protocol_ReadFloat(&Payload[12]);
+    Parameters.Speed_integral_limit = FOC_Protocol_ReadFloat(&Payload[16]);
+    Parameters.Speed_output_limit = FOC_Protocol_ReadFloat(&Payload[20]);
+    Parameters.Position_kp = FOC_Protocol_ReadFloat(&Payload[24]);
+    Parameters.Position_ki = FOC_Protocol_ReadFloat(&Payload[28]);
+    Parameters.Position_integral_limit = FOC_Protocol_ReadFloat(&Payload[32]);
+    Parameters.Position_output_limit = FOC_Protocol_ReadFloat(&Payload[36]);
+
+    /* 控制运行期间不改环路参数，避免PID状态和输出限幅突变。 */
+    if ((Protocol.Enabled != 0u) ||
+        (Parameters.Current_bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
+        (Parameters.Current_bandwidth > FOC_PROTOCOL_CURRENT_BW_MAX_HZ) ||
+        (Parameters.Speed_kp != Parameters.Speed_kp) ||
+        (Parameters.Speed_ki != Parameters.Speed_ki) ||
+        (Parameters.Speed_integral_limit != Parameters.Speed_integral_limit) ||
+        (Parameters.Speed_output_limit != Parameters.Speed_output_limit) ||
+        (Parameters.Position_kp != Parameters.Position_kp) ||
+        (Parameters.Position_ki != Parameters.Position_ki) ||
+        (Parameters.Position_integral_limit != Parameters.Position_integral_limit) ||
+        (Parameters.Position_output_limit != Parameters.Position_output_limit) ||
+        (Parameters.Speed_kp < 0.0f) ||
+        (Parameters.Speed_kp > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
+        (Parameters.Speed_ki < 0.0f) ||
+        (Parameters.Speed_ki > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
+        (Parameters.Speed_integral_limit < 0.0f) ||
+        (Parameters.Speed_integral_limit > FOC_PROTOCOL_SPEED_LIMIT_MAX) ||
+        (Parameters.Speed_output_limit < 0.0f) ||
+        (Parameters.Speed_output_limit > FOC_PROTOCOL_SPEED_LIMIT_MAX) ||
+        (Parameters.Position_kp < 0.0f) ||
+        (Parameters.Position_kp > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
+        (Parameters.Position_ki < 0.0f) ||
+        (Parameters.Position_ki > FOC_PROTOCOL_LOOP_GAIN_MAX) ||
+        (Parameters.Position_integral_limit < 0.0f) ||
+        (Parameters.Position_integral_limit > FOC_PROTOCOL_POSITION_LIMIT_MAX) ||
+        (Parameters.Position_output_limit < 0.0f) ||
+        (Parameters.Position_output_limit > FOC_PROTOCOL_POSITION_LIMIT_MAX))
+    {
+        return;
+    }
+
+    Motor_Control_SetLoopParameters(&Parameters);
+    Protocol.Parameters_seen = 1u;
+    FOC_Protocol_SendLoopParameters();
+}
+
+/***********************************************
+ * @brief : 回传当前生效的FOC环路参数
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static void FOC_Protocol_SendLoopParameters(void)
+{
+    uint8 Frame[FOC_PROTOCOL_PARAMETER_LENGTH + 10u];
+    uint8 *Payload = &Frame[8];
+    Motor_LoopParameters_t Parameters;
+    uint16 Crc;
+
+    /* 参数读取表示上位机已完成连接同步，可使用当前参数启动有感FOC。 */
+    Protocol.Parameters_seen = 1u;
+    Motor_Control_GetLoopParameters(&Parameters);
+    memset(Frame, 0, sizeof(Frame));
+    Frame[0] = 0xaau;
+    Frame[1] = 0x55u;
+    Frame[2] = FOC_PROTOCOL_VERSION;
+    Frame[3] = FOC_PROTOCOL_FRAME_TYPE_PARAMETER_WRITE;
+    FOC_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
+    FOC_Protocol_WriteU16(&Frame[6], FOC_PROTOCOL_PARAMETER_LENGTH);
+    FOC_Protocol_WriteU16(&Payload[0], Parameters.Current_bandwidth);
+    FOC_Protocol_WriteFloat(&Payload[8], Parameters.Speed_kp);
+    FOC_Protocol_WriteFloat(&Payload[12], Parameters.Speed_ki);
+    FOC_Protocol_WriteFloat(&Payload[16], Parameters.Speed_integral_limit);
+    FOC_Protocol_WriteFloat(&Payload[20], Parameters.Speed_output_limit);
+    FOC_Protocol_WriteFloat(&Payload[24], Parameters.Position_kp);
+    FOC_Protocol_WriteFloat(&Payload[28], Parameters.Position_ki);
+    FOC_Protocol_WriteFloat(&Payload[32], Parameters.Position_integral_limit);
+    FOC_Protocol_WriteFloat(&Payload[36], Parameters.Position_output_limit);
+    Crc = FOC_Protocol_Crc16(&Frame[2],
+                             (uint16)(6u + FOC_PROTOCOL_PARAMETER_LENGTH));
+    FOC_Protocol_WriteU16(
+        &Frame[8u + FOC_PROTOCOL_PARAMETER_LENGTH],
+        Crc);
+    (void)debug_send_buffer(Frame, (uint32)sizeof(Frame));
+}
+
+/***********************************************
+ * @brief : 执行一帧有感FOC电流环控制命令
+ * @param : Payload 16字节控制命令负载
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static void FOC_Protocol_HandleEncoderFoc(const uint8 *Payload)
+{
+    uint8 Flags = Payload[1];
+    uint8 Foc_mode = Payload[2];
+    int8 Direction = ((Flags & 0x02u) != 0u) ? -1 : 1;
+    float Primary_target = FOC_Protocol_ReadFloat(&Payload[4]);
+    float Id_target = FOC_Protocol_ReadFloat(&Payload[8]);
+    uint16 Bandwidth = Motor.Current_loop.Bandwidth;
+
+    if (Foc_mode == (uint8)MOTOR_FOC_CURRENT)
+    {
+        Bandwidth = FOC_Protocol_ReadU16(&Payload[12]);
+    }
+
+    if ((Foc_mode < (uint8)MOTOR_FOC_CURRENT) ||
+        (Foc_mode > (uint8)MOTOR_FOC_POSITION) ||
+        (Primary_target != Primary_target) ||
+        (Id_target != Id_target) ||
+        ((Foc_mode == (uint8)MOTOR_FOC_CURRENT) &&
+         ((Bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
+          (Bandwidth > FOC_PROTOCOL_CURRENT_BW_MAX_HZ))) ||
+        (Protocol.Parameters_seen == 0u))
+    {
+        FOC_Protocol_StopControl();
+        return;
+    }
+
+    if (Protocol.Voice_selected != 0u)
+    {
+        FOC_Voice_Stop();
+    }
+
+    Id_target = Float_Limit(Id_target, -50.0f, 50.0f);
+    if (Foc_mode == (uint8)MOTOR_FOC_CURRENT)
+    {
+        Motor_Control_SetCurrentBandwidth(Bandwidth);
+    }
+    Motor.Current_loop.Id_target = Id_target;
+    Motor.Foc_direction = Direction;
+    if (Foc_mode == (uint8)MOTOR_FOC_CURRENT)
+    {
+        Motor.Current_loop.Iq_target =
+            Float_Limit(Primary_target, -100.0f, 100.0f) *
+            (float)Direction;
+    }
+    else if (Foc_mode == (uint8)MOTOR_FOC_SPEED)
+    {
+        Motor.Speed_loop.Target_rpm =
+            Float_Limit(Primary_target, -50000.0f, 50000.0f) *
+            (float)Direction;
+        Motor.Current_loop.Iq_target = 0.0f;
+    }
+    else
+    {
+        Motor.Position_loop.Target_degree =
+            Float_Limit(Primary_target, 0.0f, 360.0f);
+        Motor.Current_loop.Iq_target = 0.0f;
+    }
+    Motor.Foc_mode = (Motor_foc_mode_t)Foc_mode;
+    Motor.Control_mode = MOTOR_CONTROL_ENCODER_FOC;
+    Protocol.Enabled = 1u;
     Protocol.Voice_selected = 0u;
 }
 
@@ -274,6 +456,10 @@ static void FOC_Protocol_HandleControl(const uint8 *Payload)
     {
         FOC_Protocol_HandleOpenLoop(Payload);
     }
+    else if (Drive_mode == FOC_PROTOCOL_DRIVE_MODE_ENCODER_FOC)
+    {
+        FOC_Protocol_HandleEncoderFoc(Payload);
+    }
     else if (Drive_mode == FOC_PROTOCOL_DRIVE_MODE_VOICE)
     {
         FOC_Protocol_HandleVoice(Payload);
@@ -308,7 +494,22 @@ static void FOC_Protocol_SendTelemetry(void)
     FOC_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
     FOC_Protocol_WriteU16(&Frame[6], FOC_PROTOCOL_TELEMETRY_LENGTH);
 
-    if (Motor.Pole_pairs == 0u)
+    if (Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC)
+    {
+        if (Motor.Foc_mode == MOTOR_FOC_POSITION)
+        {
+            Speed_target = Motor.Speed_loop.Target_rpm;
+        }
+        else if (Motor.Foc_mode == MOTOR_FOC_SPEED)
+        {
+            Speed_target = Motor.Speed_loop.Target_rpm;
+        }
+        else
+        {
+            Speed_target = 0.0f;
+        }
+    }
+    else if (Motor.Pole_pairs == 0u)
     {
         Speed_target = 0.0f;
     }
@@ -334,9 +535,13 @@ static void FOC_Protocol_SendTelemetry(void)
     FOC_Protocol_WriteU32(&Payload[4], Protocol.Time_ms);
     FOC_Protocol_WriteFloat(&Payload[8], Speed_target);
     FOC_Protocol_WriteFloat(&Payload[12], Motor.Encoder.Spd_rpm);
-    FOC_Protocol_WriteFloat(&Payload[16], 0.0f);
+    FOC_Protocol_WriteFloat(
+        &Payload[16],
+        Motor.Current_loop.Id_target);
     FOC_Protocol_WriteFloat(&Payload[20], Current.park.Id);
-    FOC_Protocol_WriteFloat(&Payload[24], 0.0f);
+    FOC_Protocol_WriteFloat(
+        &Payload[24],
+        Motor.Current_loop.Iq_target);
     FOC_Protocol_WriteFloat(&Payload[28], Current.park.Iq);
     FOC_Protocol_WriteFloat(&Payload[32], SVPWM.VBUS);
     FOC_Protocol_WriteFloat(&Payload[36], (float)Motor.Encoder.Zero_offset);
@@ -471,10 +676,20 @@ static void FOC_Protocol_HandleFrame(const uint8 *Frame, uint16 Length)
         return;
     }
 
-    if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_CONTROL) &&
-        (Payload_length == FOC_PROTOCOL_CONTROL_LENGTH))
+    if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_PARAMETER_READ) &&
+        (Payload_length == 0u))
+    {
+        FOC_Protocol_SendLoopParameters();
+    }
+    else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_CONTROL) &&
+             (Payload_length == FOC_PROTOCOL_CONTROL_LENGTH))
     {
         FOC_Protocol_HandleControl(&Frame[8]);
+    }
+    else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_PARAMETER_WRITE) &&
+             (Payload_length == FOC_PROTOCOL_PARAMETER_LENGTH))
+    {
+        FOC_Protocol_HandleParameterWrite(&Frame[8]);
     }
     else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_SONG_LIST) &&
              (Payload_length == 0u))
@@ -551,6 +766,7 @@ static void FOC_Protocol_ParseByte(uint8 Data)
 void FOC_Protocol_Init(void)
 {
     memset(&Protocol, 0, sizeof(Protocol));
+    Motor_Control_SetLoopParameters(&Motor.Loop_parameters);
 }
 
 void FOC_Protocol_Service(void)

@@ -1,9 +1,12 @@
 #include "Motor_Control.h"
+#include "float.h"
+#include "Current_sample/Current_sample.h"
 #include "Filter/AB_Filter.h"
 #include "FOC_Voice/FOC_Voice.h"
 #include "Motor_Flash/Motor_Flash.h"
 #include "My_TCPWM/My_TCPWM.h"
 #include "SVPWM/SVPWM.h"
+#include <math.h>
 
 static const ABFilterParam_t RpmFltCfg =
 {
@@ -49,8 +52,128 @@ Foc_motor_t Motor =
         .Hold_count = 0u,
         .Started = 0u
     },
+    .Current_loop =
+    {
+        .Id_target = 0.0f,
+        .Iq_target = 0.0f,
+        .Bandwidth = 1000u,
+        .Ud_output = 0.0f,
+        .Uq_output = 0.0f,
+        .Id_pid =
+        {
+            .Kp = 0.0f,
+            .Ki = 0.0f,
+            .Kd = 0.0f,
+            .Tau = MOTOR_CURRENT_LOOP_TS,
+            .T = MOTOR_CURRENT_LOOP_TS,
+            .LimMin = -FLT_MAX,
+            .LimMax = FLT_MAX,
+            .LimMinInt = -FLT_MAX,
+            .LimMaxInt = FLT_MAX,
+            .Ek = 0.0f,
+            .last_Ek = 0.0f,
+            .Ek_sum = 0.0f,
+            .Integrator = 0.0f,
+            .PrevMeasurement = 0.0f,
+            .Differentiator = 0.0f,
+            .P_Out = 0.0f,
+            .I_Out = 0.0f,
+            .D_Out = 0.0f,
+            .OUT = 0.0f
+        },
+        .Iq_pid =
+        {
+            .Kp = 0.0f,
+            .Ki = 0.0f,
+            .Kd = 0.0f,
+            .Tau = MOTOR_CURRENT_LOOP_TS,
+            .T = MOTOR_CURRENT_LOOP_TS,
+            .LimMin = -FLT_MAX,
+            .LimMax = FLT_MAX,
+            .LimMinInt = -FLT_MAX,
+            .LimMaxInt = FLT_MAX,
+            .Ek = 0.0f,
+            .last_Ek = 0.0f,
+            .Ek_sum = 0.0f,
+            .Integrator = 0.0f,
+            .PrevMeasurement = 0.0f,
+            .Differentiator = 0.0f,
+            .P_Out = 0.0f,
+            .I_Out = 0.0f,
+            .D_Out = 0.0f,
+            .OUT = 0.0f
+        }
+    },
+    .Speed_loop =
+    {
+        .Target_rpm = 0.0f,
+        .Pid =
+        {
+            .Kp = 0.0f,
+            .Ki = 0.0f,
+            .Kd = 0.0f,
+            .Tau = MOTOR_SPEED_LOOP_TS,
+            .T = MOTOR_SPEED_LOOP_TS,
+            .LimMin = 0.0f,
+            .LimMax = 0.0f,
+            .LimMinInt = 0.0f,
+            .LimMaxInt = 0.0f,
+            .Ek = 0.0f,
+            .last_Ek = 0.0f,
+            .Ek_sum = 0.0f,
+            .Integrator = 0.0f,
+            .PrevMeasurement = 0.0f,
+            .Differentiator = 0.0f,
+            .P_Out = 0.0f,
+            .I_Out = 0.0f,
+            .D_Out = 0.0f,
+            .OUT = 0.0f
+        },
+        .Iq_output = 0.0f
+    },
+    .Position_loop =
+    {
+        .Target_degree = 0.0f,
+        .Pid =
+        {
+            .Kp = 0.0f,
+            .Ki = 0.0f,
+            .Kd = 0.0f,
+            .Tau = MOTOR_POSITION_LOOP_TS,
+            .T = MOTOR_POSITION_LOOP_TS,
+            .LimMin = 0.0f,
+            .LimMax = 0.0f,
+            .LimMinInt = 0.0f,
+            .LimMaxInt = 0.0f,
+            .Ek = 0.0f,
+            .last_Ek = 0.0f,
+            .Ek_sum = 0.0f,
+            .Integrator = 0.0f,
+            .PrevMeasurement = 0.0f,
+            .Differentiator = 0.0f,
+            .P_Out = 0.0f,
+            .I_Out = 0.0f,
+            .D_Out = 0.0f,
+            .OUT = 0.0f
+        },
+        .Speed_output = 0.0f
+    },
+    .Loop_parameters =
+    {
+        .Current_bandwidth = 1000u,
+        .Speed_kp = 0.0f,
+        .Speed_ki = 0.0f,
+        .Speed_integral_limit = 0.0f,
+        .Speed_output_limit = 0.0f,
+        .Position_kp = 0.0f,
+        .Position_ki = 0.0f,
+        .Position_integral_limit = 0.0f,
+        .Position_output_limit = 0.0f
+    },
     .Pole_pairs = 7u,
     .Control_mode = MOTOR_CONTROL_OPEN_LOOP,
+    .Foc_mode = MOTOR_FOC_CURRENT,
+    .Foc_direction = 1,
     .Zero_ready = 0u
 };
 
@@ -497,12 +620,296 @@ static void Motor_openloop_set(float Uq, float Ud, int16 Step)
 /*  有感FOC                                                                  */
 /*===========================================================================*/
 
+/***********************************************
+ * @brief : 按指定幅值限制d/q轴电流矢量
+ * @param : IdValue d轴电流地址
+ * @param : IqValue q轴电流地址
+ * @param : Limit 电流矢量幅值上限，单位为A
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static void Current_VectorLimit(float *IdValue,
+                                float *IqValue,
+                                float Limit)
+{
+    float Current_square;
+    float Limit_square;
+    float Scale;
+
+    if ((IdValue == NULL) || (IqValue == NULL))
+    {
+        return;
+    }
+
+    if ((Limit <= 0.0f) ||
+        (*IdValue != *IdValue) ||
+        (*IqValue != *IqValue) ||
+        (*IdValue > FLT_MAX) ||
+        (*IdValue < -FLT_MAX) ||
+        (*IqValue > FLT_MAX) ||
+        (*IqValue < -FLT_MAX))
+    {
+        *IdValue = 0.0f;
+        *IqValue = 0.0f;
+        return;
+    }
+
+    Current_square = (*IdValue * *IdValue) + (*IqValue * *IqValue);
+    Limit_square = Limit * Limit;
+    if (Current_square > Limit_square)
+    {
+        Scale = Limit / sqrtf(Current_square);
+        *IdValue *= Scale;
+        *IqValue *= Scale;
+    }
+}
+
+/***********************************************
+ * @brief : 执行d/q轴电流PI控制并将SVPWM饱和误差反算给积分器
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static void Current_Loop(void)
+{
+    float Ud_request;
+    float Uq_request;
+    float Voltage_scale;
+    float Voltage_limit;
+    float Id_target;
+    float Iq_target;
+    uint16 DutyA;
+    uint16 DutyB;
+    uint16 DutyC;
+
+    Voltage_limit = SVPWM.DQ_Limit;
+    PID_SetIntegralLimit(&Motor.Current_loop.Id_pid, Voltage_limit);
+    PID_SetIntegralLimit(&Motor.Current_loop.Iq_pid, Voltage_limit);
+
+    Id_target = Motor.Current_loop.Id_target;
+    Iq_target = Motor.Current_loop.Iq_target;
+    Current_VectorLimit(
+        &Id_target,
+        &Iq_target,
+        MOTOR_CURRENT_VECTOR_LIMIT_A);
+    Motor.Current_loop.Id_target = Id_target;
+    Motor.Current_loop.Iq_target = Iq_target;
+
+    Ud_request = PID_Update(
+        &Motor.Current_loop.Id_pid,
+        Id_target,
+        Current.park.Id);
+    Uq_request = PID_Update(
+        &Motor.Current_loop.Iq_pid,
+        Iq_target,
+        Current.park.Iq);
+
+    Voltage_scale = foc_voltage_calc_duty(
+        Ud_request,
+        Uq_request,
+        Motor.Encoder.Electrical_angle,
+        &DutyA,
+        &DutyB,
+        &DutyC);
+
+    Motor.Current_loop.Ud_output = Ud_request * Voltage_scale;
+    Motor.Current_loop.Uq_output = Uq_request * Voltage_scale;
+
+    PID_BackCalculation(
+        &Motor.Current_loop.Id_pid,
+        Motor.Current_loop.Ud_output);
+    PID_BackCalculation(
+        &Motor.Current_loop.Iq_pid,
+        Motor.Current_loop.Uq_output);
+
+    My_TCPWM_SetDuty(DutyA, DutyB, DutyC);
+}
+
+/***********************************************
+ * @brief : 执行速度环并更新电流环Iq目标
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static void Speed_Loop(void)
+{
+    Motor.Speed_loop.Iq_output = PID_Update(
+        &Motor.Speed_loop.Pid,
+        Motor.Speed_loop.Target_rpm,
+        Motor.Encoder.Spd_rpm);
+    Motor.Current_loop.Iq_target = Motor.Speed_loop.Iq_output;
+}
+
+/***********************************************
+ * @brief : 执行位置环并更新速度环目标
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
+static void Position_Loop(void)
+{
+    float Mechanical_degree;
+
+    Mechanical_degree = (float)Motor.Encoder.Mechanical_angle *
+                        360.0f / (float)ANGLE_PERIOD;
+    Motor.Position_loop.Speed_output = PID_Update(
+        &Motor.Position_loop.Pid,
+        Motor.Position_loop.Target_degree,
+        Mechanical_degree);
+    Motor.Speed_loop.Target_rpm = Motor.Position_loop.Speed_output *
+                                  (float)Motor.Foc_direction;
+}
+
+void Motor_Control_SetCurrentBandwidth(uint16 BandwidthHz)
+{
+    if (BandwidthHz == 0u)
+    {
+        return;
+    }
+
+    if (BandwidthHz < PID_BANDWIDTH_MIN_HZ)
+    {
+        BandwidthHz = PID_BANDWIDTH_MIN_HZ;
+    }
+    else if (BandwidthHz > PID_BANDWIDTH_MAX_HZ)
+    {
+        BandwidthHz = PID_BANDWIDTH_MAX_HZ;
+    }
+    if ((Motor.Current_loop.Bandwidth == BandwidthHz) &&
+        (Motor.Current_loop.Id_pid.Kp != 0.0f) &&
+        (Motor.Current_loop.Iq_pid.Kp != 0.0f))
+    {
+        return;
+    }
+
+    PID_SetBandwidth(
+        &Motor.Current_loop.Id_pid,
+        BandwidthHz,
+        LD,
+        RS);
+    PID_SetBandwidth(
+        &Motor.Current_loop.Iq_pid,
+        BandwidthHz,
+        LQ,
+        RS);
+    Motor.Current_loop.Bandwidth = BandwidthHz;
+    Motor.Loop_parameters.Current_bandwidth = BandwidthHz;
+}
+
+void Motor_Control_SetLoopParameters(const Motor_LoopParameters_t *Parameters)
+{
+    float Voltage_limit;
+    float Speed_integral_limit;
+    float Speed_output_limit;
+    float Position_integral_limit;
+    float Position_output_limit;
+
+    if (Parameters == NULL)
+    {
+        return;
+    }
+
+    Motor_Control_SetCurrentBandwidth(Parameters->Current_bandwidth);
+
+    Voltage_limit = SVPWM.DQ_Limit;
+    if ((Voltage_limit != Voltage_limit) || (Voltage_limit < 0.0f))
+    {
+        Voltage_limit = 0.0f;
+    }
+    PID_Config(
+        &Motor.Current_loop.Id_pid,
+        MOTOR_CURRENT_LOOP_TS,
+        MOTOR_CURRENT_LOOP_TS,
+        -FLT_MAX,
+        FLT_MAX,
+        -Voltage_limit,
+        Voltage_limit);
+    PID_Config(
+        &Motor.Current_loop.Iq_pid,
+        MOTOR_CURRENT_LOOP_TS,
+        MOTOR_CURRENT_LOOP_TS,
+        -FLT_MAX,
+        FLT_MAX,
+        -Voltage_limit,
+        Voltage_limit);
+
+    Speed_integral_limit = Parameters->Speed_integral_limit;
+    if (Speed_integral_limit < 0.0f)
+    {
+        Speed_integral_limit = -Speed_integral_limit;
+    }
+    Speed_output_limit = Parameters->Speed_output_limit;
+    if (Speed_output_limit < 0.0f)
+    {
+        Speed_output_limit = -Speed_output_limit;
+    }
+    PID_Config(
+        &Motor.Speed_loop.Pid,
+        MOTOR_SPEED_LOOP_TS,
+        MOTOR_SPEED_LOOP_TS,
+        -Speed_output_limit,
+        Speed_output_limit,
+        -Speed_integral_limit,
+        Speed_integral_limit);
+    Motor.Speed_loop.Pid.Kp = Parameters->Speed_kp;
+    Motor.Speed_loop.Pid.Ki = Parameters->Speed_ki;
+
+    Position_integral_limit = Parameters->Position_integral_limit;
+    if (Position_integral_limit < 0.0f)
+    {
+        Position_integral_limit = -Position_integral_limit;
+    }
+    Position_output_limit = Parameters->Position_output_limit;
+    if (Position_output_limit < 0.0f)
+    {
+        Position_output_limit = -Position_output_limit;
+    }
+    PID_Config(
+        &Motor.Position_loop.Pid,
+        MOTOR_POSITION_LOOP_TS,
+        MOTOR_POSITION_LOOP_TS,
+        -Position_output_limit,
+        Position_output_limit,
+        -Position_integral_limit,
+        Position_integral_limit);
+    Motor.Position_loop.Pid.Kp = Parameters->Position_kp;
+    Motor.Position_loop.Pid.Ki = Parameters->Position_ki;
+    Motor.Loop_parameters = *Parameters;
+}
+
+void Motor_Control_GetLoopParameters(Motor_LoopParameters_t *Parameters)
+{
+    if (Parameters == NULL)
+    {
+        return;
+    }
+
+    *Parameters = Motor.Loop_parameters;
+}
+
 /*===========================================================================*/
 /*  总控制                                                                    */
 /*===========================================================================*/
 
 void Motor_Control_Loop(void)
 {
+    static uint16 Speed_count = 0u;
+    static uint16 Position_count = 0u;
+    static Motor_control_mode_t Last_control_mode = MOTOR_CONTROL_OPEN_LOOP;
+    static Motor_foc_mode_t Last_foc_mode = MOTOR_FOC_CURRENT;
+
+    if ((Motor.Control_mode != Last_control_mode) ||
+        ((Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC) &&
+         (Motor.Foc_mode != Last_foc_mode)))
+    {
+        Speed_count = 0u;
+        Position_count = 0u;
+    }
+
     switch (Motor.Control_mode)
     {
         case MOTOR_CONTROL_OPEN_LOOP:
@@ -513,7 +920,42 @@ void Motor_Control_Loop(void)
             break;
 
         case MOTOR_CONTROL_ENCODER_FOC:
+            if (Motor.Foc_mode == MOTOR_FOC_POSITION)
+            {
+                if (Position_count == 0u)
+                {
+                    Position_Loop();
+                    Position_count = MOTOR_POSITION_LOOP_DIVIDER - 1u;
+                }
+                else
+                {
+                    Position_count--;
+                }
+            }
+            else
+            {
+                Position_count = 0u;
+            }
 
+            if ((Motor.Foc_mode == MOTOR_FOC_SPEED) ||
+                (Motor.Foc_mode == MOTOR_FOC_POSITION))
+            {
+                if (Speed_count == 0u)
+                {
+                    Speed_Loop();
+                    Speed_count = MOTOR_SPEED_LOOP_DIVIDER - 1u;
+                }
+                else
+                {
+                    Speed_count--;
+                }
+            }
+            else
+            {
+                Speed_count = 0u;
+            }
+
+            Current_Loop();
             break;
 
         case MOTOR_CONTROL_VOICE:
@@ -523,4 +965,7 @@ void Motor_Control_Loop(void)
         default:
             break;
     }
+
+    Last_control_mode = Motor.Control_mode;
+    Last_foc_mode = Motor.Foc_mode;
 }

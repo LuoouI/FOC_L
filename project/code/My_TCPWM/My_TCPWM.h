@@ -5,6 +5,7 @@
 
 #define TCPWM_PERIOD             (2000u)      // 20kHz中心对齐PWM周期计数值
 #define TCPWM_DUTY_MAX           (10000u)     // PWM占空比最大值，对应100%
+#define TCPWM_DUTY_OUTPUT_LIMIT  (9000u)      // 三相PWM实际输出上限，对应90%
 #define TCPWM_ADC_SAMPLE_COUNT   (750u)       // ADC采样事件比较值，避开PWM谷底开关尖峰
 
 /*===========================================================================*/
@@ -55,9 +56,9 @@ void My_TCPWM_Start(void);
 
 /***********************************************
  * @brief : 写入三相PWM占空比缓冲值，在主计数器TC事件时同步生效
- * @param : DutyA A相占空比，范围0~10000
- * @param : DutyB B相占空比，范围0~10000
- * @param : DutyC C相占空比，范围0~10000
+ * @param : DutyA A相万分比占空比，输入范围0~10000，实际限制到9000
+ * @param : DutyB B相万分比占空比，输入范围0~10000，实际限制到9000
+ * @param : DutyC C相万分比占空比，输入范围0~10000，实际限制到9000
  * @return: void
  * @date  : 2026-08-14
  * @author: L
