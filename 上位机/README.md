@@ -1,0 +1,44 @@
+# FOC_L
+
+用于当前 `FOC_L` 工程的 Windows 电机调试上位机。首版提供完整的仿真设备，可在下位机通信协议完成前检查工作流和界面。
+
+## 已完成功能
+
+- 电机连接、使能、停止、急停和急停复位
+- 电压、电流/转矩、速度、位置四种控制模式
+- 转速、电流、电压、角度、温度、PWM 等实时状态
+- 50000 点/通道环形缓冲示波器、可见区峰谷抽稀、批量高速波形接收、暂停显示和 CSV 导出
+- 左侧菜单独立切换实时工作台和串口诊断
+- Windows COM 口扫描、串口配置、协议帧过滤与手动发送
+- 选择下位机内置乐曲并通过圆形播放按钮启动，播放完成后自动停止
+- 事件和故障操作日志
+- `Ctrl + +` 放大界面，`Ctrl + -` 缩小界面
+
+## 启动
+
+首次运行：
+
+```powershell
+cd "E:\study\Smart Car\My_Foc\FOC_L\upper_computer"
+npm install
+npm run build
+npm start
+```
+
+开发模式：
+
+```powershell
+npm run dev
+```
+
+仅在浏览器中预览界面：
+
+```powershell
+npm run dev:web
+```
+
+## 当前限制
+
+上位机通过 USB 转串口连接电机驱动板，CAN 留给 MCU 之间通信。串口协议实现位于 `electron/serial/protocol.cjs`，协议说明见 `docs/SERIAL_PROTOCOL.md`。当前下位机复用 `debug_init()` 的 UART0（115200 bit/s、P00_1/P00_0），连接期间不要在该串口输出 `printf` 文本。
+
+`foc_voice` 音乐模式负责选择下位机内置乐曲并发送播放命令。乐曲节拍和实际播放均由下位机负责；播放会话号用于防止 20 Hz 控制心跳重复触发歌曲，播放状态位用于在乐曲结束后自动关闭上位机使能。
