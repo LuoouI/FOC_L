@@ -19,7 +19,7 @@
 首次运行：
 
 ```powershell
-cd "E:\study\Smart Car\My_Foc\FOC_L\upper_computer"
+cd "CYT\上位机"
 npm install
 npm run build
 npm start
@@ -36,6 +36,10 @@ npm run dev
 ```powershell
 npm run dev:web
 ```
+
+## 教学视频
+
+上位机安装、串口连接和参数调试教学视频正在制作中，发布后补充链接。
 
 ## 当前限制
 
