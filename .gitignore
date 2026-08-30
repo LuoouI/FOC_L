@@ -1,0 +1,10 @@
+# 本地依赖和生成文件
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+**/Debug*/
+**/BrowseInfo/
+**/*.pbi
+**/*.pbd
+**/*.pbw
+**/*.swj

@@ -1,0 +1,30 @@
+# 只提交用户编写的 code 目录，其余 SDK、工程配置和生成文件均忽略
+*
+
+# 保留忽略规则本身
+!.gitignore
+!README.md
+
+# 保留 project/code 和 project/user 目录及其全部内容
+!project/
+project/*
+!project/code/
+!project/code/**
+!project/user/
+!project/user/**
+
+# 保留整套工程目录，排除生成文件和本地依赖
+!上位机/
+!上位机/**
+上位机/node_modules/
+上位机/dist/
+上位机/*.tsbuildinfo
+上位机/vite.config.js
+上位机/vite.config.d.ts
+
+!PCB/
+!PCB/**
+
+!电机调试台/
+!电机调试台/**
+电机调试台/swxJRNL.swj
