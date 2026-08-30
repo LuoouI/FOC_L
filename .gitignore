@@ -3,6 +3,7 @@
 
 # 保留忽略规则本身
 !.gitignore
+!README.md
 
 # 保留 project/code 和 project/user 目录及其全部内容
 !project/
