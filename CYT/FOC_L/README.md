@@ -19,6 +19,7 @@
 ## 相关文档
 
 - 固件模块说明：`project/code/驱动代码说明.md`
+- 零点校准与三相自检提示音：`project/code/零点校准与三相自检提示音.md`
 - TCPWM 和 ADC 触发链路：`project/code/FOC_TCPWM触发ADC采样链路.md`
 - TCPWM、TriggerMux、ADC 术语：`project/code/FOC_TCPWM_ADC名词解释.md`
 
