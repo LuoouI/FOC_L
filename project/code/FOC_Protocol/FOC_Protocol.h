@@ -13,7 +13,7 @@
 #define FOC_PROTOCOL_FRAME_TYPE_WAVEFORM  (0x21u)    // 高速波形采样帧
 #define FOC_PROTOCOL_CONTROL_LENGTH       (16u)      // 控制命令负载长度
 #define FOC_PROTOCOL_PARAMETER_LENGTH     (44u)      // FOC环路参数负载长度
-#define FOC_PROTOCOL_TELEMETRY_LENGTH     (52u)      // 基础遥测负载长度
+#define FOC_PROTOCOL_TELEMETRY_LENGTH     (56u)      // 基础遥测负载长度
 #define FOC_PROTOCOL_WAVEFORM_LENGTH      (36u)      // 高速波形负载长度
 #define FOC_PROTOCOL_FRAME_MAX            (64u)      // 接收帧最大字节数
 #define FOC_PROTOCOL_SONG_NAME_MAX        (48u)      // 单个UTF-8乐曲名称最大字节数

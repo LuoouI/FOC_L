@@ -6,7 +6,7 @@
 #define TCPWM_PERIOD             (2000u)      // 20kHz中心对齐PWM周期计数值
 #define TCPWM_DUTY_MAX           (10000u)     // PWM占空比最大值，对应100%
 #define TCPWM_DUTY_OUTPUT_LIMIT  (9000u)      // 三相PWM实际输出上限，对应90%
-#define TCPWM_ADC_SAMPLE_COUNT   (750u)       // ADC采样事件比较值，避开PWM谷底开关尖峰
+#define TCPWM_ADC_SAMPLE_COUNT   (100u)       // ADC采样事件比较值，避开PWM谷底开关尖峰
 
 /*===========================================================================*/
 /*  单相桥臂硬件描述                                                          */

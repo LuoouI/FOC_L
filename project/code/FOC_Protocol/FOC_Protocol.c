@@ -591,6 +591,8 @@ static void Foc_Protocol_SendTelemetry(void)
     Foc_Protocol_WriteFloat(&Payload[40], Mechanical_angle);
     Foc_Protocol_WriteFloat(&Payload[44], Electrical_angle);
     Foc_Protocol_WriteFloat(&Payload[48], Torque.Motor_torque);
+    Foc_Protocol_WriteU16(&Payload[52], Current.adc_raw_u);
+    Foc_Protocol_WriteU16(&Payload[54], Current.adc_raw_w);
 
     Crc = Foc_Protocol_Crc16(&Frame[2], (uint16)(6u + FOC_PROTOCOL_TELEMETRY_LENGTH));
     Foc_Protocol_WriteU16(&Frame[8u + FOC_PROTOCOL_TELEMETRY_LENGTH], Crc);
