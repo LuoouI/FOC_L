@@ -78,6 +78,30 @@ Foc_motor_t Motor =
         .Track_ready = 0u,
         .In_deadband = 0u
     },
+    .SMO = 
+    {   
+        .E_alpha = 0.0f,
+        .E_beta = 0.0f,
+        .E_beta_filter = 0.0f,
+        .E_alpha_filter = 0.0f,
+        .K_slide = 0.0f,
+        .Boundary_current = 0.0f,
+        .Filter_bandwidth = 500.0f,
+        .A = (2.0f * LS * 0.001f - RS * FOC_TS) / DENOMINATOR,
+        .B = FOC_TS / DENOMINATOR,
+        .PLL = 
+        {
+            .Kp = 0.0f,
+            .Ki = 0.0f,
+            .integral_sum = 0.0f,
+            .Phase_error = 0.0f,
+            .Mechanical_angle_est = 0u,
+            .Electrical_angle_est = 0u,
+            .Omega_est = 0.0f,
+            .Omega_limit = 0.0f,
+            .Intergal_limit = 0.0f
+        }
+    },
     .Ab_filter_bandwidth = 50.0f,
     .Pole_pairs = 7u,
     .Control_mode = MOTOR_CONTROL_OPEN_LOOP,
@@ -1128,7 +1152,67 @@ void Motor_Control_SetPositionKp(float Kp,
  ************************************************/
 static void Back_emf_Cal(void)
 {
-    
+    float Error_alpha = 0.0f;
+    float Error_beta = 0.0f;
+
+    if ((Motor.SMO.K_slide <= 0.0f) ||
+        (Motor.SMO.Boundary_current <= 0.0f) ||
+        (Motor.SMO.Filter_bandwidth <= 0.0f))
+    {
+        return;
+    }
+
+    if (Motor.SMO.Ready == 0u)
+    {
+        Motor.SMO.I_alpha_est = Current.clark.Alpha;
+        Motor.SMO.I_beta_est = Current.clark.Beta;
+        Motor.SMO.I_alpha_estpre = Current.clark.Alpha;
+        Motor.SMO.I_beta_estpre = Current.clark.Beta;
+        Motor.SMO.E_alpha = 0.0f;
+        Motor.SMO.E_beta = 0.0f;
+        Motor.SMO.E_alpha_filter = 0.0f;
+        Motor.SMO.E_beta_filter = 0.0f;
+        Motor.SMO.Ready = 1u;
+        return;
+    }
+
+    Motor.SMO.I_alpha_estpre = Motor.SMO.I_alpha_est;
+    Motor.SMO.I_beta_estpre = Motor.SMO.I_beta_est;
+
+    Motor.SMO.I_alpha_est =
+        Motor.SMO.A * Motor.SMO.I_alpha_estpre +
+        Motor.SMO.B * (Motor.SMO.U_alpha_pre - Motor.SMO.E_alpha);
+    Motor.SMO.I_beta_est =
+        Motor.SMO.A * Motor.SMO.I_beta_estpre +
+        Motor.SMO.B * (Motor.SMO.U_beta_pre - Motor.SMO.E_beta);
+
+    Error_alpha = Motor.SMO.I_alpha_est - Current.clark.Alpha;
+    Error_beta = Motor.SMO.I_beta_est - Current.clark.Beta;
+
+    Motor.SMO.E_alpha =
+        Motor.SMO.K_slide *
+        Float_Limit(
+            Error_alpha / Motor.SMO.Boundary_current,
+            -1.0f,
+            1.0f);
+    Motor.SMO.E_beta =
+        Motor.SMO.K_slide *
+        Float_Limit(
+            Error_beta / Motor.SMO.Boundary_current,
+            -1.0f,
+            1.0f);
+
+    float Filter_omega = TWO_PI * Motor.SMO.Filter_bandwidth;
+    float Filter_coefficient =
+        Filter_omega * FOC_TS /
+        (1.0f + Filter_omega * FOC_TS);
+
+    Motor.SMO.E_alpha_filter +=
+        Filter_coefficient *
+        (Motor.SMO.E_alpha - Motor.SMO.E_alpha_filter);
+    Motor.SMO.E_beta_filter +=
+        Filter_coefficient *
+        (Motor.SMO.E_beta - Motor.SMO.E_beta_filter);
 }
 
 /*===========================================================================*/

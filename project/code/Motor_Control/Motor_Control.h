@@ -21,7 +21,7 @@
 #define MOTOR_POSITION_LOOP_TS          \
     (1.0f / (float)MOTOR_POSITION_LOOP_HZ)              /* 位置环采样周期，单位为秒 */
 
-#define MOTOR_CURRENT_VECTOR_LIMIT_A    (10.0f)         /* d/q轴电流矢量固定限幅，单位为A */
+#define MOTOR_CURRENT_VECTOR_LIMIT_A     (10.0f)        /* d/q轴电流矢量固定限幅，单位为A */
 #define MOTOR_AB_FILTER_BW_MIN_HZ        (1.0f)         /* AB滤波器带宽下限，单位为Hz */
 #define MOTOR_AB_FILTER_BW_MAX_HZ        (500.0f)       /* AB滤波器带宽上限，单位为Hz */
 
@@ -155,6 +155,55 @@ typedef struct
 } Foc_PositionLoop_t;
 
 /*===========================================================================*/
+/*  PLL                                                                      */
+/*===========================================================================*/
+typedef struct
+{
+    float Kp;                               /* PLL比例增益 */
+    float Ki;                               /* PLL积分增益 */
+    float integral_sum;                     /* PLL积分累加量 */
+    float Phase_error;                      /* PLL相位误差 */
+
+    uint16 Mechanical_angle_est;            /* 估算机械角度，范围0~32767 */
+    uint16 Electrical_angle_est;            /* 估算电角度，范围0~32767 */
+
+    float Omega_est;                        /* 估算电角速度，单位为rad/s */
+    float Omega_limit;                      /* 电角速度限幅，单位为rad/s */
+    float Intergal_limit;                   /* 积分项限幅 */
+
+}PLL_t;
+
+/*===========================================================================*/
+/*  SMO数据结构                                                               */
+/*===========================================================================*/
+typedef struct
+{
+    float I_alpha_est;                      /* Alpha轴电流估算值 */ 
+    float I_beta_est;                       /* Beta轴电流估算值 */
+    float I_alpha_estpre;                   /* 上一周期Alpha轴电流估算值 */
+    float I_beta_estpre;                    /* 上一周期Beta轴电流估算值 */
+ 
+    float U_alpha_pre;                      /* 上一周期Alpha轴电压 */
+    float U_beta_pre;                       /* 上一周期Beta轴电压 */
+
+    float E_alpha;                          /* Alpha轴反电动势 */
+    float E_beta;                           /* Beta轴反电动势 */
+    float E_alpha_filter;                   /* Alpha轴反电动势滤波值 */
+    float E_beta_filter;                    /* Beta轴反电动势滤波值 */
+
+    float K_slide;                          /* 滑模增益 */  
+
+    float Boundary_current;                 /* 滑模边界电流，单位为A */
+    float Filter_bandwidth;                 /* 反电动势滤波器带宽，单位为Hz */
+    uint8 Ready;                            /* SMO就绪标志 */
+
+    float A;                                /*离散系数*/
+    float B;
+
+    PLL_t PLL;                              /* PLL对象 */
+}SMO_t;
+
+/*===========================================================================*/
 /*  FOC电机控制对象                                                           */
 /*===========================================================================*/
 typedef struct
@@ -165,6 +214,7 @@ typedef struct
     Foc_CurrentLoop_t Current_loop;         /* 电流环对象 */
     Foc_SpeedLoop_t Speed_loop;             /* 速度环对象 */
     Foc_PositionLoop_t Position_loop;       /* 位置环对象 */
+    SMO_t SMO;                              /* SMO对象 */
     float Ab_filter_bandwidth;              /* 当前生效的AB滤波器带宽，单位为Hz */
 
     uint8 Pole_pairs;                       /* 电机极对数 */
@@ -172,39 +222,8 @@ typedef struct
     Motor_foc_mode_t Foc_mode;              /* 当前有感FOC子模式 */
     int8 Foc_direction;                     /* 有感FOC目标方向，取值为+1或-1 */
     uint8 Zero_ready;                       /* 编码器零点参数有效标志 */
+
 } Foc_motor_t;
-
-/*===========================================================================*/
-/*  SMO数据结构                                                               */
-/*===========================================================================*/
-typedef struct
-{
-    float I_ualpha_est;                     /* Alpha轴电流估算值 */ 
-    float I_ubeta_est;                      /* Beta轴电流估算值 */
-    float I_alpha_estpre;                   /* 上一周期Alpha轴电流估算值 */
-    float I_beta_estpre;                    /* 上一周期Beta轴电流估算值
-    float U_ualpha_pre;                     /* 上一周期Alpha轴电压 */
-    float U_ubeta_pre;                      /* 上一周期Beta轴电压 */
-
-    float E_alpha;                          /* Alpha轴反电动势 */
-    float E_beta;                           /* Beta轴反电动势 */
-    
-    uint16 Mechanical_angle;                /* 机械角度，范围0~32767 */
-    uint16 Electrical_angle;                /* 电角度，范围0~32767 */
-
-    PLL_t PLL;                              /* PLL对象 */
-}SMO_t;
-
-/*===========================================================================*/
-/*  PLL                                                                      */
-/*===========================================================================*/
-typedef struct
-{
-    float Kp;               /* PLL比例增益 */
-    float Ki;               /* PLL积分增益 */
-    float integral_sum;     /* PLL积分累加量 */
-
-}PLL_t;
 
 /*===========================================================================*/
 /*  总控制结构体                                                              */
