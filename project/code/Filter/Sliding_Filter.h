@@ -8,11 +8,11 @@
 /*===========================================================================*/
 typedef struct
 {
-    float Sum;                         // 窗口数据总和
-    float *WindowData;                 // 窗口数据缓存区
-    uint8 Count;                       // 当前有效数据数量
-    uint8 Index;                       // 下一个写入位置
-    uint8 WindowSize;                  // 窗口长度
+    float Sum;                  /* 窗口数据总和 */
+    float *WindowData;          /* 窗口数据缓存区 */
+    uint8 Count;                /* 当前有效数据数量 */
+    uint8 Index;                /* 下一个写入位置 */
+    uint8 WindowSize;           /* 窗口长度 */
 } Sliding_Filter_t;
 
 /***********************************************

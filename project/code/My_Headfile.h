@@ -20,4 +20,4 @@
 #include "Motor_Flash/Motor_Flash.h"
 #include "Motor_Torque/Motor_Torque.h"
 
-#endif // MY_HEADFILE_H
+#endif /* MY_HEADFILE_H */

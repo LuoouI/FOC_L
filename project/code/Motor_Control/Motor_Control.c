@@ -454,7 +454,6 @@ static void Zero_CalibrationFlashTone(void)
     }
 }
 
-/* 执行桥臂自检及编码器零点校准。 */
 void Zero_Calibration(void)
 {
     AngleUnwrap_t Travel_angle;
@@ -769,7 +768,7 @@ static void EncoderFoc_StopOutput(void)
  * @date  : 2026-08-29
  * @author: L
  ************************************************/
-static void Current_Loop(void)
+static void Current_AntiWindup(void)
 {
     float Ud_request;
     float Uq_request;
@@ -1117,6 +1116,22 @@ void Motor_Control_SetPositionKp(float Kp,
 }
 
 /*===========================================================================*/
+/*  无感FOC                                                                  */
+/*===========================================================================*/
+
+/***********************************************
+ * @brief : 反电动势估算
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-11
+ * @author: L
+ ************************************************/
+static void Back_emf_Cal(void)
+{
+    
+}
+
+/*===========================================================================*/
 /*  总控制                                                                    */
 /*===========================================================================*/
 
@@ -1196,7 +1211,7 @@ void Motor_Control_Loop(void)
                 Speed_count = 0u;
             }
 
-            Current_Loop();
+            Current_AntiWindup();
             break;
 
         case MOTOR_CONTROL_VOICE:

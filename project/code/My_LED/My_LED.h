@@ -3,19 +3,19 @@
 
 #include "zf_common_headfile.h"
 
-#define LED_PIN                 (P06_5)       // 保护指示灯引脚
-#define LED_BLINK_PERIOD_MS     (500u)        // 保护指示灯闪烁周期
-#define VOLTAGE_LED_OFF_VALUE   (24.0f)       // 指示灯常灭电压阈值
-#define VOLTAGE_LED_BLINK_VALUE (24.5f)       // 指示灯闪烁电压阈值
+#define LED_PIN                 (P06_5)         /* 保护指示灯引脚 */
+#define LED_BLINK_PERIOD_MS     (500u)          /* 保护指示灯闪烁周期 */
+#define VOLTAGE_LED_OFF_VALUE   (24.0f)         /* 指示灯常灭电压阈值 */
+#define VOLTAGE_LED_BLINK_VALUE (24.5f)         /* 指示灯闪烁电压阈值 */
 
 /*===========================================================================*/
 /*  保护指示灯状态                                                          */
 /*===========================================================================*/
 typedef enum
 {
-    LED_ON = 0,                                 // 常亮
-    LED_BLINK,                                  // 闪烁
-    LED_OFF                                     // 常灭
+    LED_ON = 0, /* 常亮 */
+    LED_BLINK, /* 闪烁 */
+    LED_OFF /* 常灭 */
 } LED_State_t;
 
 /***********************************************

@@ -4,38 +4,38 @@
 #include "zf_common_headfile.h"
 #include "Foc_transform/Foc_transform.h"
 
-#define CURRENT_SAMPLE_ADC_REF_VOLTAGE       (3.3f)       // ADC参考电压
-#define CURRENT_SAMPLE_ADC_MAX_VALUE         (4095.0f)    // 12位ADC最大采样值
-#define CURRENT_SAMPLE_AMPLIFIER_GAIN        (20.0f)      // 电流采样运放增益
-#define CURRENT_SAMPLE_SHUNT_RESISTANCE      (0.002f)     // 电流采样电阻，单位为欧姆
-#define CURRENT_SAMPLE_CALIBRATION_COUNT     (256u)       // 零电流状态下的偏置校准次数
+#define CURRENT_SAMPLE_ADC_REF_VOLTAGE       (3.3f)         /* ADC参考电压 */
+#define CURRENT_SAMPLE_ADC_MAX_VALUE         (4095.0f)      /* 12位ADC最大采样值 */
+#define CURRENT_SAMPLE_AMPLIFIER_GAIN        (20.0f)        /* 电流采样运放增益 */
+#define CURRENT_SAMPLE_SHUNT_RESISTANCE      (0.002f)       /* 电流采样电阻，单位为欧姆 */
+#define CURRENT_SAMPLE_CALIBRATION_COUNT     (256u)         /* 零电流状态下的偏置校准次数 */
 
 /*===========================================================================*/
 /*  三相电流采样数据                                                         */
 /*===========================================================================*/
 typedef struct
 {
-    uint16 adc_raw_u;       // U相ADC原始采样值
-    uint16 adc_raw_v;       // V相ADC原始采样值，当前两电阻采样硬件无独立通道
-    uint16 adc_raw_w;       // W相ADC原始采样值
+    uint16 adc_raw_u;                   /* U相ADC原始采样值 */
+    uint16 adc_raw_v;                   /* V相ADC原始采样值，当前两电阻采样硬件无独立通道 */
+    uint16 adc_raw_w;                   /* W相ADC原始采样值 */
 
-    uint16 offset_u;        // U相ADC零偏
-    uint16 offset_v;        // V相ADC零偏，当前两电阻采样硬件为零
-    uint16 offset_w;        // W相ADC零偏
+    uint16 offset_u;                    /* U相ADC零偏 */
+    uint16 offset_v;                    /* V相ADC零偏，当前两电阻采样硬件为零 */
+    uint16 offset_w;                    /* W相ADC零偏 */
 
-    int16 adc_cal_u;        // U相原始采样扣除零偏后的ADC值
-    int16 adc_cal_v;        // V相由U、W相电流重构的ADC值
-    int16 adc_cal_w;        // W相原始采样扣除零偏后的ADC值
+    int16 adc_cal_u;                    /* U相原始采样扣除零偏后的ADC值 */
+    int16 adc_cal_v;                    /* V相由U、W相电流重构的ADC值 */
+    int16 adc_cal_w;                    /* W相原始采样扣除零偏后的ADC值 */
 
-    float current_u;        // U相电流，单位为安培
-    float current_v;        // V相电流，单位为安培
-    float current_w;        // W相电流，单位为安培
+    float current_u;                    /* U相电流，单位为安培 */
+    float current_v;                    /* V相电流，单位为安培 */
+    float current_w;                    /* W相电流，单位为安培 */
 
-    Clark_t clark;          // Clarke变换结果
-    Park_t park;             // Park变换结果
+    Clark_t clark;                      /* Clarke变换结果 */
+    Park_t park;                        /* Park变换结果 */
 
-    uint8 calibrated;       // 偏置校准完成标志
-    uint8 sample_ready;     // 新的一组三相电流数据准备完成标志
+    uint8 calibrated;                   /* 偏置校准完成标志 */
+    uint8 sample_ready;                 /* 新的一组三相电流数据准备完成标志 */
 } motor_current_t;
 
 extern volatile motor_current_t Current;
