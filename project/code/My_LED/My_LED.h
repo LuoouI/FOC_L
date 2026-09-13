@@ -18,49 +18,12 @@ typedef enum
     LED_OFF /* 常灭 */
 } LED_State_t;
 
-/***********************************************
- * @brief : 初始化保护指示灯
- * @param : /
- * @return: void
- * @date  : 2026-08-15
- * @author: L
- ************************************************/
-void My_LED_Init(void);
-
-/***********************************************
- * @brief : 设置保护指示灯状态
- * @param : LedState 指示灯状态
- * @return: void
- * @date  : 2026-08-15
- * @author: L
- ************************************************/
-void My_LED_SetLedState(LED_State_t LedState);
-
-/***********************************************
- * @brief : 更新保护指示灯输出，支持常亮、闪烁和常灭三种状态
- * @param : ElapsedMs 距离上次调用经过的毫秒数
- * @return: void
- * @date  : 2026-08-15
- * @author: L
- ************************************************/
-void My_LED_Service(uint32 ElapsedMs);
-
-/***********************************************
- * @brief : 获取当前保护指示灯状态
- * @param : /
- * @return: LED_State_t 当前指示灯状态
- * @date  : 2026-08-15
- * @author: L
- ************************************************/
-LED_State_t My_LED_GetLedState(void);
-
-/***********************************************
- * @brief : 根据母线电压更新保护指示灯状态
- * @param : /
- * @return: void
- * @date  : 2026-08-15
- * @author: L
- ************************************************/
-void My_LED_CheckVoltage(void);
+/*==================================================== 基础函数 ====================================================*/
+void            My_LED_Init                 (void);
+void            My_LED_SetLedState          (LED_State_t LedState);
+void            My_LED_Service              (uint32 ElapsedMs);
+LED_State_t     My_LED_GetLedState          (void);
+void            My_LED_CheckVoltage         (void);
+/*==================================================== 基础函数 ====================================================*/
 
 #endif

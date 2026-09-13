@@ -3,6 +3,13 @@
 #include "Motor_Control/Motor_Control.h"
 #include "My_TCPWM/My_TCPWM.h"
 
+/***********************************************
+ * @brief : 按键服务函数
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-14
+ * @author: L
+ ************************************************/
 void My_Key_Service(void)
 {
     if (KEY_SHORT_PRESS == key_get_state(KEY_2))

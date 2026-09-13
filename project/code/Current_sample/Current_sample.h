@@ -40,41 +40,13 @@ typedef struct
 
 extern volatile motor_current_t Current;
 
-/***********************************************
- * @brief : 初始化三相电流采样数据
- * @param : /
- * @return: void
- * @date  : 2026-08-17
- * @author: L
- ************************************************/
-void Current_Sample_Init(void);
 
-/***********************************************
- * @brief : 开始新一轮电流采样零偏校准，调用时应保持电机无电流
- * @param : /
- * @return: void
- * @date  : 2026-08-17
- * @author: L
- ************************************************/
-void Current_Sample_StartCalibration(void);
-
-/***********************************************
- * @brief : 更新一组三相电流采样数据
- * @param : AdcRawU U相ADC原始采样值
- * @param : AdcRawW W相ADC原始采样值
- * @return: void
- * @date  : 2026-08-29
- * @author: L
- ************************************************/
-void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawW);
-
-/***********************************************
- * @brief : 根据当前三相电流和电角度更新Clark、Park变换结果
- * @param : ElectricalAngle 电角度，0~32767对应0~2PI
- * @return: void
- * @date  : 2026-08-17
- * @author: L
- ************************************************/
-void Current_Sample_Transform(uint16 ElectricalAngle);
+/*==================================================== 基础函数 ====================================================*/
+void    Current_Sample_Init                        (void);
+void    Current_Sample_StartCalibration            (void);
+void    Current_Sample_Update                      (uint16 AdcRawU, uint16 AdcRawW);
+void    Current_Sample_Clarke                      (void);
+void    Current_Sample_Transform                   (uint16 ElectricalAngle);
+/*==================================================== 基础函数 ====================================================*/
 
 #endif

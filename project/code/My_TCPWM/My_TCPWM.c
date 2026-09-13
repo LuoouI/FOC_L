@@ -237,6 +237,13 @@ static uint32 TCPWM_DutyToCompare(uint16 Duty)
            ((uint32)TCPWM_PERIOD * Duty / TCPWM_DUTY_MAX);
 }
 
+/***********************************************
+ * @brief : 初始化三相中心对齐互补PWM
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-14
+ * @author: L
+ ************************************************/
 void My_TCPWM_Init(void)
 {
     TCPWM_SinglePhase_Init(&TCPWM_3PHASE.a);
@@ -246,6 +253,13 @@ void My_TCPWM_Init(void)
     TCPWM_Duty_Sync_Init();
 }
 
+/***********************************************
+ * @brief : 启动三相PWM和ADC基准计数器
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-14
+ * @author: L
+ ************************************************/
 void My_TCPWM_Start(void)
 {
     /* 公共触发线在芯片内部扇出到各计数器的TRIG3。 */
@@ -256,6 +270,15 @@ void My_TCPWM_Start(void)
         1u);
 }
 
+/***********************************************
+ * @brief : 写入三相PWM占空比缓冲值，在主计数器TC事件时同步生效
+ * @param : DutyA A相万分比占空比，输入范围0~10000，实际限制到9000
+ * @param : DutyB B相万分比占空比，输入范围0~10000，实际限制到9000
+ * @param : DutyC C相万分比占空比，输入范围0~10000，实际限制到9000
+ * @return: void
+ * @date  : 2026-08-14
+ * @author: L
+ ************************************************/
 void My_TCPWM_SetDuty(uint16 DutyA, uint16 DutyB, uint16 DutyC)
 {
     Cy_Tcpwm_Pwm_SetCompare0_Buff(

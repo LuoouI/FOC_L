@@ -81,11 +81,25 @@ static int32 FastSinLookup(uint16 Angle)
     return Value;
 }
 
+/***********************************************
+ * @brief : 使用四分之一波查表和线性插值计算正弦值
+ * @param : ElectricalAngle 电角度，0~32767对应0~2PI
+ * @return: 正弦值，范围-1.0~1.0
+ * @date  : 2026-08-15
+ * @author: L
+ ************************************************/
 float fast_sinf(uint16 ElectricalAngle)
 {
     return (float)FastSinLookup(ElectricalAngle) / (float)FAST_SIN_SCALE;
 }
 
+/***********************************************
+ * @brief : 使用四分之一波查表和线性插值计算余弦值
+ * @param : ElectricalAngle 电角度，0~32767对应0~2PI
+ * @return: 余弦值，范围-1.0~1.0
+ * @date  : 2026-08-15
+ * @author: L
+ ************************************************/
 float fast_cosf(uint16 ElectricalAngle)
 {
     return (float)FastSinLookup(

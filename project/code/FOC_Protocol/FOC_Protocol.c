@@ -7,6 +7,9 @@
 
 static Foc_Protocol_t Protocol;
 static void Foc_Protocol_SendLoopParameters(void);
+static void Foc_Protocol_SendObserverParameters(void);
+static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload);
+static void Foc_Protocol_SendObserverWaveform(void);
 
 /***********************************************
  * @brief : 读取小端序16位无符号整数
@@ -281,13 +284,127 @@ static void Foc_Protocol_SendLoopParameters(void)
 }
 
 /***********************************************
- * @brief : 执行一帧有感FOC电流环控制命令
- * @param : Payload 16字节控制命令负载
+ * @brief : 回传当前生效的SMO和PLL参数
+ * @param : 无
  * @return: 无
- * @date  : 2026-08-29
+ * @date  : 2026-09-13
  * @author: L
  ************************************************/
-static void Foc_Protocol_HandleEncoderFoc(const uint8 *Payload)
+static void Foc_Protocol_SendObserverParameters(void)
+{
+    uint8 Frame[FOC_PROTOCOL_OBSERVER_PARAMETER_LENGTH + 10u];
+    uint8 *Payload = &Frame[8];
+    uint16 Crc;
+
+    memset(Frame, 0, sizeof(Frame));
+    Frame[0] = 0xaau;
+    Frame[1] = 0x55u;
+    Frame[2] = FOC_PROTOCOL_VERSION;
+    Frame[3] = FOC_PROTOCOL_FRAME_TYPE_OBSERVER_PARAMETER_WRITE;
+    Foc_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
+    Foc_Protocol_WriteU16(
+        &Frame[6],
+        FOC_PROTOCOL_OBSERVER_PARAMETER_LENGTH);
+
+    Foc_Protocol_WriteFloat(&Payload[0], Motor.SMO.K_slide);
+    Foc_Protocol_WriteFloat(
+        &Payload[4],
+        Motor.SMO.Boundary_current);
+    Foc_Protocol_WriteFloat(
+        &Payload[8],
+        Motor.SMO.Filter_bandwidth);
+    Foc_Protocol_WriteFloat(&Payload[12], Motor.SMO.PLL.Kp);
+    Foc_Protocol_WriteFloat(&Payload[16], Motor.SMO.PLL.Ki);
+    Foc_Protocol_WriteFloat(
+        &Payload[20],
+        Motor.SMO.PLL.Omega_limit);
+    Foc_Protocol_WriteFloat(
+        &Payload[24],
+        Motor.SMO.PLL.Intergal_limit);
+
+    Crc = Foc_Protocol_Crc16(
+        &Frame[2],
+        (uint16)(6u + FOC_PROTOCOL_OBSERVER_PARAMETER_LENGTH));
+    Foc_Protocol_WriteU16(
+        &Frame[8u + FOC_PROTOCOL_OBSERVER_PARAMETER_LENGTH],
+        Crc);
+    (void)debug_send_buffer(Frame, (uint32)sizeof(Frame));
+}
+
+/***********************************************
+ * @brief : 校验并应用上位机下发的SMO和PLL参数
+ * @param : Payload 28字节观测器参数写入负载
+ * @return: 无
+ * @date  : 2026-09-13
+ * @author: L
+ ************************************************/
+static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload)
+{
+    float Smo_gain = Foc_Protocol_ReadFloat(&Payload[0]);
+    float Smo_boundary_current = Foc_Protocol_ReadFloat(&Payload[4]);
+    float Smo_filter_bandwidth = Foc_Protocol_ReadFloat(&Payload[8]);
+    float Pll_kp = Foc_Protocol_ReadFloat(&Payload[12]);
+    float Pll_ki = Foc_Protocol_ReadFloat(&Payload[16]);
+    float Pll_omega_limit = Foc_Protocol_ReadFloat(&Payload[20]);
+    float Pll_integral_limit = Foc_Protocol_ReadFloat(&Payload[24]);
+
+    /* 电机运行期间不改观测器参数，避免估算状态发生突变。 */
+    if ((Protocol.Enabled != 0u) ||
+        (Smo_gain != Smo_gain) ||
+        (Smo_boundary_current != Smo_boundary_current) ||
+        (Smo_filter_bandwidth != Smo_filter_bandwidth) ||
+        (Pll_kp != Pll_kp) ||
+        (Pll_ki != Pll_ki) ||
+        (Pll_omega_limit != Pll_omega_limit) ||
+        (Pll_integral_limit != Pll_integral_limit) ||
+        (Smo_gain < 0.0f) ||
+        (Smo_gain > FOC_PROTOCOL_SMO_GAIN_MAX) ||
+        (Smo_boundary_current < 0.0f) ||
+        (Smo_boundary_current > FOC_PROTOCOL_SMO_BOUNDARY_CURRENT_MAX) ||
+        (Smo_filter_bandwidth < FOC_PROTOCOL_SMO_FILTER_BW_MIN) ||
+        (Smo_filter_bandwidth > FOC_PROTOCOL_SMO_FILTER_BW_MAX) ||
+        (Pll_kp < 0.0f) ||
+        (Pll_kp > FOC_PROTOCOL_PLL_GAIN_MAX) ||
+        (Pll_ki < 0.0f) ||
+        (Pll_ki > FOC_PROTOCOL_PLL_GAIN_MAX) ||
+        (Pll_omega_limit < 0.0f) ||
+        (Pll_omega_limit > FOC_PROTOCOL_PLL_OMEGA_MAX) ||
+        (Pll_integral_limit < 0.0f) ||
+        (Pll_integral_limit > FOC_PROTOCOL_PLL_INTEGRAL_MAX))
+    {
+        return;
+    }
+
+    Motor.SMO.K_slide = Smo_gain;
+    Motor.SMO.Boundary_current = Smo_boundary_current;
+    Motor.SMO.Filter_bandwidth = Smo_filter_bandwidth;
+    Motor.SMO.PLL.Kp = Pll_kp;
+    Motor.SMO.PLL.Ki = Pll_ki;
+    Motor.SMO.PLL.Omega_limit = Pll_omega_limit;
+    Motor.SMO.PLL.Intergal_limit = Pll_integral_limit;
+
+    /* 调参后重新初始化观测器状态，避免沿用旧参数下的积分和估算值。 */
+    Motor.SMO.Ready = 0u;
+    Motor.SMO.U_alpha_pre = 0.0f;
+    Motor.SMO.U_beta_pre = 0.0f;
+    Motor.SMO.PLL.integral_sum = 0.0f;
+    Motor.SMO.PLL.Phase_error = 0.0f;
+    Motor.SMO.PLL.Omega_est = 0.0f;
+    Motor.SMO.PLL.Mechanical_angle_est = 0u;
+    Motor.SMO.PLL.Electrical_angle_est = 0u;
+    Foc_Protocol_SendObserverParameters();
+}
+
+/***********************************************
+ * @brief : 执行一帧有感或无感FOC控制命令
+ * @param : Payload 16字节控制命令负载
+ * @param : Control_mode 下位机使用的FOC控制模式
+ * @return: 无
+ * @date  : 2026-09-13
+ * @author: L
+ ************************************************/
+static void Foc_Protocol_HandleFocCommon(const uint8 *Payload,
+                                         Motor_control_mode_t Control_mode)
 {
     uint8 Flags = Payload[1];
     uint8 Foc_mode = Payload[2];
@@ -314,7 +431,8 @@ static void Foc_Protocol_HandleEncoderFoc(const uint8 *Payload)
          ((Ramp_rate != Ramp_rate) ||
           (Ramp_rate < FOC_PROTOCOL_SPEED_RAMP_MIN) ||
           (Ramp_rate > FOC_PROTOCOL_SPEED_RAMP_MAX))) ||
-        (Motor.Zero_ready == 0u) ||
+        ((Control_mode == MOTOR_CONTROL_ENCODER_FOC) &&
+         (Motor.Zero_ready == 0u)) ||
         ((Foc_mode == (uint8)MOTOR_FOC_CURRENT) &&
          ((Bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
           (Bandwidth > FOC_PROTOCOL_CURRENT_BW_MAX_HZ))) ||
@@ -361,9 +479,33 @@ static void Foc_Protocol_HandleEncoderFoc(const uint8 *Payload)
         Motor.Current_loop.Iq_target = 0.0f;
     }
     Motor.Foc_mode = (Motor_foc_mode_t)Foc_mode;
-    Motor.Control_mode = MOTOR_CONTROL_ENCODER_FOC;
+    Motor.Control_mode = Control_mode;
     Protocol.Enabled = 1u;
     Protocol.Voice_selected = 0u;
+}
+
+/***********************************************
+ * @brief : 执行一帧有感FOC电流环控制命令
+ * @param : Payload 16字节控制命令负载
+ * @return: 无
+ * @date  : 2026-09-13
+ * @author: L
+ ************************************************/
+static void Foc_Protocol_HandleEncoderFoc(const uint8 *Payload)
+{
+    Foc_Protocol_HandleFocCommon(Payload, MOTOR_CONTROL_ENCODER_FOC);
+}
+
+/***********************************************
+ * @brief : 执行一帧无感FOC观测调试控制命令
+ * @param : Payload 16字节控制命令负载
+ * @return: 无
+ * @date  : 2026-09-13
+ * @author: L
+ ************************************************/
+static void Foc_Protocol_HandleSensorlessFoc(const uint8 *Payload)
+{
+    Foc_Protocol_HandleFocCommon(Payload, MOTOR_CONTROL_SENSORLESS_FOC);
 }
 
 /***********************************************
@@ -500,6 +642,10 @@ static void Foc_Protocol_HandleControl(const uint8 *Payload)
     {
         Foc_Protocol_HandleEncoderFoc(Payload);
     }
+    else if (Drive_mode == FOC_PROTOCOL_DRIVE_MODE_SENSORLESS_FOC)
+    {
+        Foc_Protocol_HandleSensorlessFoc(Payload);
+    }
     else if (Drive_mode == FOC_PROTOCOL_DRIVE_MODE_VOICE)
     {
         Foc_Protocol_HandleVoice(Payload);
@@ -534,7 +680,8 @@ static void Foc_Protocol_SendTelemetry(void)
     Foc_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
     Foc_Protocol_WriteU16(&Frame[6], FOC_PROTOCOL_TELEMETRY_LENGTH);
 
-    if (Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC)
+    if ((Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC) ||
+        (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC))
     {
         if (Motor.Foc_mode == MOTOR_FOC_POSITION)
         {
@@ -559,9 +706,17 @@ static void Foc_Protocol_SendTelemetry(void)
                        FOC_PROTOCOL_CONTROL_HZ * 60.0f /
                        ((float)ANGLE_PERIOD * (float)Motor.Pole_pairs);
     }
-    Mechanical_angle = Motor_Control_GetMechanicalDegree();
-    Electrical_angle = (float)Motor.Encoder.Electrical_angle *
-                       360.0f / (float)ANGLE_PERIOD;
+    if (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC)
+    {
+        Mechanical_angle = 0.0f;
+        Electrical_angle = 0.0f;
+    }
+    else
+    {
+        Mechanical_angle = Motor_Control_GetMechanicalDegree();
+        Electrical_angle = (float)Motor.Encoder.Electrical_angle *
+                           360.0f / (float)ANGLE_PERIOD;
+    }
 
     Payload[0] = (Protocol.Enabled != 0u) ? 1u : 0u;
     Payload[1] = (uint8)Motor.Control_mode;
@@ -577,20 +732,35 @@ static void Foc_Protocol_SendTelemetry(void)
     }
     Foc_Protocol_WriteU32(&Payload[4], Protocol.Time_ms);
     Foc_Protocol_WriteFloat(&Payload[8], Speed_target);
-    Foc_Protocol_WriteFloat(&Payload[12], Motor.Encoder.Spd_rpm);
+    Foc_Protocol_WriteFloat(
+        &Payload[12],
+        (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC) ?
+        0.0f : Motor.Encoder.Spd_rpm);
     Foc_Protocol_WriteFloat(
         &Payload[16],
         Motor.Current_loop.Id_target);
-    Foc_Protocol_WriteFloat(&Payload[20], Current.park.Id);
+    Foc_Protocol_WriteFloat(
+        &Payload[20],
+        (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC) ?
+        0.0f : Current.park.Id);
     Foc_Protocol_WriteFloat(
         &Payload[24],
         Motor.Current_loop.Iq_target);
-    Foc_Protocol_WriteFloat(&Payload[28], Current.park.Iq);
+    Foc_Protocol_WriteFloat(
+        &Payload[28],
+        (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC) ?
+        0.0f : Current.park.Iq);
     Foc_Protocol_WriteFloat(&Payload[32], SVPWM.VBUS);
-    Foc_Protocol_WriteFloat(&Payload[36], (float)Motor.Encoder.Zero_offset);
+    Foc_Protocol_WriteFloat(
+        &Payload[36],
+        (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC) ?
+        0.0f : (float)Motor.Encoder.Zero_offset);
     Foc_Protocol_WriteFloat(&Payload[40], Mechanical_angle);
     Foc_Protocol_WriteFloat(&Payload[44], Electrical_angle);
-    Foc_Protocol_WriteFloat(&Payload[48], Torque.Motor_torque);
+    Foc_Protocol_WriteFloat(
+        &Payload[48],
+        (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC) ?
+        0.0f : Torque.Motor_torque);
     Foc_Protocol_WriteU16(&Payload[52], Current.adc_raw_u);
     Foc_Protocol_WriteU16(&Payload[54], Current.adc_raw_w);
 
@@ -632,6 +802,67 @@ static void Foc_Protocol_SendWaveform(void)
 
     Crc = Foc_Protocol_Crc16(&Frame[2], (uint16)(6u + FOC_PROTOCOL_WAVEFORM_LENGTH));
     Foc_Protocol_WriteU16(&Frame[8u + FOC_PROTOCOL_WAVEFORM_LENGTH], Crc);
+    (void)debug_send_buffer(Frame, (uint32)sizeof(Frame));
+}
+
+/***********************************************
+ * @brief : 打包并发送SMO和PLL观测器波形
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-09-13
+ * @author: L
+ ************************************************/
+static void Foc_Protocol_SendObserverWaveform(void)
+{
+    uint8 Frame[FOC_PROTOCOL_OBSERVER_WAVEFORM_LENGTH + 10u];
+    uint8 *Payload = &Frame[8];
+    uint16 Crc;
+    float Mechanical_angle;
+    float Electrical_angle;
+    float Phase_error_degree;
+
+    memset(Frame, 0, sizeof(Frame));
+    Frame[0] = 0xaau;
+    Frame[1] = 0x55u;
+    Frame[2] = FOC_PROTOCOL_VERSION;
+    Frame[3] = FOC_PROTOCOL_FRAME_TYPE_OBSERVER_WAVEFORM;
+    Foc_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
+    Foc_Protocol_WriteU16(
+        &Frame[6],
+        FOC_PROTOCOL_OBSERVER_WAVEFORM_LENGTH);
+
+    Mechanical_angle = (float)Motor.SMO.PLL.Mechanical_angle_est *
+                       360.0f / (float)ANGLE_PERIOD;
+    Electrical_angle = (float)Motor.SMO.PLL.Electrical_angle_est *
+                       360.0f / (float)ANGLE_PERIOD;
+    Phase_error_degree = Motor.SMO.PLL.Phase_error *
+                         360.0f / TWO_PI;
+
+    Foc_Protocol_WriteU32(&Payload[0], Protocol.Time_ms);
+    Foc_Protocol_WriteFloat(&Payload[4], Motor.SMO.I_alpha_est);
+    Foc_Protocol_WriteFloat(&Payload[8], Motor.SMO.I_beta_est);
+    Foc_Protocol_WriteFloat(&Payload[12], Motor.SMO.E_alpha);
+    Foc_Protocol_WriteFloat(&Payload[16], Motor.SMO.E_beta);
+    Foc_Protocol_WriteFloat(
+        &Payload[20],
+        Motor.SMO.E_alpha_filter);
+    Foc_Protocol_WriteFloat(
+        &Payload[24],
+        Motor.SMO.E_beta_filter);
+    Foc_Protocol_WriteFloat(&Payload[28], Mechanical_angle);
+    Foc_Protocol_WriteFloat(&Payload[32], Electrical_angle);
+    Foc_Protocol_WriteFloat(&Payload[36], Motor.SMO.PLL.Omega_est);
+    Foc_Protocol_WriteFloat(&Payload[40], Phase_error_degree);
+    /* 将实际Clarke电流追加到负载末尾，保持既有SMO/PLL字段偏移不变。 */
+    Foc_Protocol_WriteFloat(&Payload[44], Current.clark.Alpha);
+    Foc_Protocol_WriteFloat(&Payload[48], Current.clark.Beta);
+
+    Crc = Foc_Protocol_Crc16(
+        &Frame[2],
+        (uint16)(6u + FOC_PROTOCOL_OBSERVER_WAVEFORM_LENGTH));
+    Foc_Protocol_WriteU16(
+        &Frame[8u + FOC_PROTOCOL_OBSERVER_WAVEFORM_LENGTH],
+        Crc);
     (void)debug_send_buffer(Frame, (uint32)sizeof(Frame));
 }
 
@@ -726,6 +957,11 @@ static void Foc_Protocol_HandleFrame(const uint8 *Frame, uint16 Length)
     {
         Foc_Protocol_SendLoopParameters();
     }
+    else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_OBSERVER_PARAMETER_READ) &&
+             (Payload_length == 0u))
+    {
+        Foc_Protocol_SendObserverParameters();
+    }
     else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_CONTROL) &&
              (Payload_length == FOC_PROTOCOL_CONTROL_LENGTH))
     {
@@ -735,6 +971,11 @@ static void Foc_Protocol_HandleFrame(const uint8 *Frame, uint16 Length)
              (Payload_length == FOC_PROTOCOL_PARAMETER_LENGTH))
     {
         Foc_Protocol_HandleParameterWrite(&Frame[8]);
+    }
+    else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_OBSERVER_PARAMETER_WRITE) &&
+             (Payload_length == FOC_PROTOCOL_OBSERVER_PARAMETER_LENGTH))
+    {
+        Foc_Protocol_HandleObserverParameterWrite(&Frame[8]);
     }
     else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_SONG_LIST) &&
              (Payload_length == 0u))
@@ -808,12 +1049,26 @@ static void Foc_Protocol_ParseByte(uint8 Data)
     }
 }
 
+/***********************************************
+ * @brief : 初始化调试串口及FOC-UART协议状态
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 void Foc_Protocol_Init(void)
 {
     debug_init();
     memset(&Protocol, 0, sizeof(Protocol));
 }
 
+/***********************************************
+ * @brief : 处理串口接收、乐曲选择和播放开关
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 void Foc_Protocol_Service(void)
 {
     uint8 Receive_data[FOC_PROTOCOL_FRAME_MAX];
@@ -858,8 +1113,23 @@ void Foc_Protocol_Service(void)
         Protocol.Last_waveform_ms = Current_ms;
         Foc_Protocol_SendWaveform();
     }
+
+    if ((Protocol.Control_seen != 0u) &&
+        ((uint32)(Current_ms - Protocol.Last_observer_waveform_ms) >=
+         FOC_PROTOCOL_OBSERVER_WAVEFORM_PERIOD_MS))
+    {
+        Protocol.Last_observer_waveform_ms = Current_ms;
+        Foc_Protocol_SendObserverWaveform();
+    }
 }
 
+/***********************************************
+ * @brief : 更新FOC-UART协议毫秒时间基准，需按1 kHz调用
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 void Foc_Protocol_Tick1ms(void)
 {
     Protocol.Time_ms++;

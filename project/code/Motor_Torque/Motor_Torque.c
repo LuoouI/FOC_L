@@ -11,6 +11,13 @@ volatile Torque_t Torque =
     .Ready = 1u
 };
 
+/***********************************************
+ * @brief : 根据q轴电流估算电机理想输出转矩
+ * @param : Iq q轴电流，单位为A
+ * @return: /
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
 void Motor_Torque_Estimate(float Iq)
 {
     if ((Iq != Iq) ||

@@ -48,10 +48,10 @@ extern const Motor_ZeroCalib_t Motor_zeroCalib;
 /*===========================================================================*/
 typedef enum
 {
-    MOTOR_CONTROL_OPEN_LOOP = 0,    /* 开环电压矢量控制 */
-    MOTOR_CONTROL_ENCODER_FOC,      /* 有感FOC */
-    MOTOR_CONTROL_SENSORLESS_FOC,   /* 无感FOC */
-    MOTOR_CONTROL_VOICE             /* 电机音乐播放控制 */
+    MOTOR_CONTROL_OPEN_LOOP = 0,     /* 开环电压矢量控制 */
+    MOTOR_CONTROL_ENCODER_FOC = 1,   /* 有感FOC */
+    MOTOR_CONTROL_VOICE = 2,         /* 电机音乐播放控制 */
+    MOTOR_CONTROL_SENSORLESS_FOC = 3 /* 无感FOC */
 } Motor_control_mode_t;
 
 /*===========================================================================*/
@@ -162,7 +162,7 @@ typedef struct
     float Kp;                               /* PLL比例增益 */
     float Ki;                               /* PLL积分增益 */
     float integral_sum;                     /* PLL积分累加量 */
-    float Phase_error;                      /* PLL相位误差 */
+    float Phase_error;                      /* PLL相位误差，单位为rad */
 
     uint16 Mechanical_angle_est;            /* 估算机械角度，范围0~32767 */
     uint16 Electrical_angle_est;            /* 估算电角度，范围0~32767 */
@@ -238,97 +238,23 @@ typedef struct
 
 extern Foc_motor_t Motor;     /* 电机控制对象 */
 
-/***********************************************
- * @brief : 使用Motor中的参数初始化FOC电流环、速度环和位置环
- * @param : 无
- * @return: 无
- * @date  : 2026-08-30
- * @author: L
- ************************************************/
-void Motor_Control_Init(void);
 
-/***********************************************
- * @brief : 更新有感FOC电流环带宽并重算PI增益
- * @param : BandwidthHz 电流环带宽，单位为Hz
- * @return: 无
- * @date  : 2026-08-29
- * @author: L
- ************************************************/
-void Motor_Control_SetCurrentBandwidth(uint16 BandwidthHz);
-
-/***********************************************
- * @brief : 更新速度环PI参数
- * @param : Kp 比例增益
- * @param : Ki 连续时间积分增益
- * @param : IntegralLimit 积分项输出限幅，单位为A
- * @return: 无
- * @date  : 2026-08-30
- * @author: L
- ************************************************/
-void Motor_Control_SetSpeedPi(float Kp,
-                              float Ki,
-                              float IntegralLimit);
-
-/***********************************************
- * @brief : 更新位置环纯Kp、限幅、死区及到位软化参数
- * @param : Kp 比例增益
- * @param : OutputLimit 输出限幅，单位为rpm
- * @param : Deadband_degree 角度死区，单位为度
- * @param : SoftRange_degree 到位线性软化范围，单位为度，不大于角度死区时关闭
- * @param : SpeedDeadband_rpm 到位速度死区，单位为rpm，填0时关闭
- * @return: 无
- * @date  : 2026-08-30
- * @author: L
- ************************************************/
-void Motor_Control_SetPositionKp(float Kp,
-                                 float OutputLimit,
-                                 float Deadband_degree,
-                                 float SoftRange_degree,
-                                 float SpeedDeadband_rpm);
-
-/***********************************************
- * @brief : 更新电机机械角度和电角度
- * @param : 无
- * @return: 无
- * @date  : 2026-08-26
- * @author: L
- ************************************************/
-void Angle_Update(void);
-
-/***********************************************
- * @brief : 读取扣除零偏并修正方向后的机械角度
- * @param : 无
- * @return: 机械角度，范围0~360度
- * @date  : 2026-08-30
- * @author: L
- ************************************************/
-float Motor_Control_GetMechanicalDegree(void);
-
-/***********************************************
- * @brief : 使用AB滤波器计算电机机械转速，需按1 kHz周期调用
- * @param : 无
- * @return: 无，结果保存到Motor.Encoder.Spd_rpm
- * @date  : 2026-08-26
- * @author: L
- ************************************************/
-void RPM_Cal(void);
-
-/***********************************************
- * @brief : 在主循环中阻塞执行桥臂自检及编码器零点校准
- * @param : 无
- * @return: 无，校准结果保存到Motor，Zero_ready表示是否成功
- * @date  : 2026-08-29
- * @author: L
- ************************************************/
-void Zero_Calibration(void);
-
-/***********************************************
- * @brief : 按20 kHz时基执行总控，并分频运行1 kHz速度环和500 Hz位置环
- * @param : 无
- * @return: 无
- * @date  : 2026-08-27
- * @author: L
- ************************************************/
-void Motor_Control_Loop(void);
+/*==================================================== 基础函数 ====================================================*/
+void    Motor_Control_Init                          (void);
+void    Motor_Control_SetCurrentBandwidth           (uint16 BandwidthHz);
+void    Motor_Control_SetSpeedPi                    (float Kp,
+                                                     float Ki,
+                                                     float IntegralLimit);
+void    Motor_Control_SetPositionKp                 (float Kp,
+                                                     float OutputLimit,
+                                                     float Deadband_degree,
+                                                     float SoftRange_degree,
+                                                     float SpeedDeadband_rpm);
+void    Angle_Update                                (void);
+float   Motor_Control_GetMechanicalDegree           (void);
+void    RPM_Cal                                     (void);
+void    Zero_Calibration                            (void);
+void    Motor_Control_Loop                          (void);
+/*==================================================== 基础函数 ====================================================*/
 
 #endif

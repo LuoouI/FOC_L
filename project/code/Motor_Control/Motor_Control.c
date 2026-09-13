@@ -228,6 +228,13 @@ static float Position_GetReversePathError(float Target_degree,
     return -Motor.Position_loop.Travel_degree;
 }
 
+/***********************************************
+ * @brief : 更新电机机械角度和电角度
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-26
+ * @author: L
+ ************************************************/
 void Angle_Update(void)
 {
     int32 MechAng;
@@ -244,6 +251,13 @@ void Angle_Update(void)
         Angle_Wrap(MechAng * (int32)Motor.Pole_pairs);
 }
 
+/***********************************************
+ * @brief : 读取扣除零偏并修正方向后的机械角度
+ * @param : 无
+ * @return: 机械角度，范围0~360度
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
 float Motor_Control_GetMechanicalDegree(void)
 {
     int32 Mechanical_count;
@@ -257,6 +271,13 @@ float Motor_Control_GetMechanicalDegree(void)
     return (float)Mechanical_count * 360.0f / (float)ANGLE_PERIOD;
 }
 
+/***********************************************
+ * @brief : 使用AB滤波器计算电机机械转速，需按1 kHz周期调用
+ * @param : 无
+ * @return: 无，结果保存到Motor.Encoder.Spd_rpm
+ * @date  : 2026-08-26
+ * @author: L
+ ************************************************/
 void RPM_Cal(void)
 {
     static uint8 FltReady = 0u;
@@ -478,6 +499,13 @@ static void Zero_CalibrationFlashTone(void)
     }
 }
 
+/***********************************************
+ * @brief : 在主循环中阻塞执行桥臂自检及编码器零点校准
+ * @param : 无
+ * @return: 无，校准结果保存到Motor，Zero_ready表示是否成功
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
 void Zero_Calibration(void)
 {
     AngleUnwrap_t Travel_angle;
@@ -986,6 +1014,13 @@ static void Position_Loop(void)
     Motor.Speed_loop.Target_rpm = Motor.Position_loop.Speed_output;
 }
 
+/***********************************************
+ * @brief : 更新有感FOC电流环带宽并重算PI增益
+ * @param : BandwidthHz 电流环带宽，单位为Hz
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
 void Motor_Control_SetCurrentBandwidth(uint16 BandwidthHz)
 {
     if (BandwidthHz == 0u)
@@ -1021,6 +1056,13 @@ void Motor_Control_SetCurrentBandwidth(uint16 BandwidthHz)
     Motor.Current_loop.Bandwidth = BandwidthHz;
 }
 
+/***********************************************
+ * @brief : 使用Motor中的参数初始化FOC电流环、速度环和位置环
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
 void Motor_Control_Init(void)
 {
     float Voltage_limit;
@@ -1063,6 +1105,15 @@ void Motor_Control_Init(void)
         Motor.Position_loop.Speed_deadband_rpm);
 }
 
+/***********************************************
+ * @brief : 更新速度环PI参数
+ * @param : Kp 比例增益
+ * @param : Ki 连续时间积分增益
+ * @param : IntegralLimit 积分项输出限幅，单位为A
+ * @return: 无
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
 void Motor_Control_SetSpeedPi(float Kp,
                               float Ki,
                               float IntegralLimit)
@@ -1090,6 +1141,17 @@ void Motor_Control_SetSpeedPi(float Kp,
     Motor.Speed_loop.Integral_limit = IntegralLimit;
 }
 
+/***********************************************
+ * @brief : 更新位置环纯Kp、限幅、死区及到位软化参数
+ * @param : Kp 比例增益
+ * @param : OutputLimit 输出限幅，单位为rpm
+ * @param : Deadband_degree 角度死区，单位为度
+ * @param : SoftRange_degree 到位线性软化范围，单位为度，不大于角度死区时关闭
+ * @param : SpeedDeadband_rpm 到位速度死区，单位为rpm，填0时关闭
+ * @return: 无
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
 void Motor_Control_SetPositionKp(float Kp,
                                  float OutputLimit,
                                  float Deadband_degree,
@@ -1142,6 +1204,47 @@ void Motor_Control_SetPositionKp(float Kp,
 /*===========================================================================*/
 /*  无感FOC                                                                  */
 /*===========================================================================*/
+
+/***********************************************
+ * @brief : 根据实际PWM占空比重构Alpha/Beta轴电压
+ * @param : 无
+ * @return: 无，结果保存到SMO上一周期电压
+ * @date  : 2026-09-13
+ * @author: L
+ ************************************************/
+static void Sensorless_Observer_UpdateVoltage(void)
+{
+    float Phase_voltage_a;
+    float Phase_voltage_b;
+    float Phase_voltage_c;
+    float Common_voltage;
+
+    if (SVPWM.VBUS <= 0.0f)
+    {
+        Motor.SMO.U_alpha_pre = 0.0f;
+        Motor.SMO.U_beta_pre = 0.0f;
+        return;
+    }
+
+    Phase_voltage_a =
+        (float)SVPWM.DutyA * SVPWM.VBUS /
+        (float)SVPWM_DUTY_MAX;
+    Phase_voltage_b =
+        (float)SVPWM.DutyB * SVPWM.VBUS /
+        (float)SVPWM_DUTY_MAX;
+    Phase_voltage_c =
+        (float)SVPWM.DutyC * SVPWM.VBUS /
+        (float)SVPWM_DUTY_MAX;
+
+    Common_voltage = (Phase_voltage_a + Phase_voltage_b + Phase_voltage_c) / 3.0f;
+
+    Phase_voltage_a -= Common_voltage;
+    Phase_voltage_b -= Common_voltage;
+
+    /* 三相电压和为零时，Alpha/Beta轴电压由A、B相直接换算。 */
+    Motor.SMO.U_alpha_pre = Phase_voltage_a;
+    Motor.SMO.U_beta_pre = (Phase_voltage_a + 2.0f * Phase_voltage_b) / SQRT3;
+}
 
 /***********************************************
  * @brief : 反电动势估算
@@ -1219,6 +1322,13 @@ static void Back_emf_Cal(void)
 /*  总控制                                                                    */
 /*===========================================================================*/
 
+/***********************************************
+ * @brief : 按20 kHz时基执行总控，并分频运行1 kHz速度环和500 Hz位置环
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-27
+ * @author: L
+ ************************************************/
 void Motor_Control_Loop(void)
 {
     static uint16 Speed_count = 0u;
@@ -1240,6 +1350,17 @@ void Motor_Control_Loop(void)
             Motor.Speed_loop.Target_rpm = Motor.Encoder.Spd_rpm;
             PID_Clear(&Motor.Speed_loop.Pid);
         }
+
+        if ((Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC) &&
+            (Last_control_mode != MOTOR_CONTROL_SENSORLESS_FOC))
+        {
+            /* 无感观测模式切入时先清除旧控制输出，避免沿用有感PWM。 */
+            Motor.Current_loop.Ud_output = 0.0f;
+            Motor.Current_loop.Uq_output = 0.0f;
+            PID_Clear(&Motor.Current_loop.Id_pid);
+            PID_Clear(&Motor.Current_loop.Iq_pid);
+            Motor_openloop_set(0.0f, 0.0f, 0);
+        }
     }
 
     switch (Motor.Control_mode)
@@ -1249,6 +1370,12 @@ void Motor_Control_Loop(void)
                 Motor.Open_loop.Uq,
                 0.0f,
                 Motor.Open_loop.Step);
+            break;
+
+        case MOTOR_CONTROL_SENSORLESS_FOC:
+            /* 无感模式只运行SMO观测，不使用编码器角度或编码器速度反馈。 */
+            Back_emf_Cal();
+            Sensorless_Observer_UpdateVoltage();
             break;
 
         case MOTOR_CONTROL_ENCODER_FOC:
@@ -1295,7 +1422,9 @@ void Motor_Control_Loop(void)
                 Speed_count = 0u;
             }
 
+            Back_emf_Cal();
             Current_AntiWindup();
+            Sensorless_Observer_UpdateVoltage();
             break;
 
         case MOTOR_CONTROL_VOICE:

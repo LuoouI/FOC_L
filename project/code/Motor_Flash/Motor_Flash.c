@@ -1,12 +1,26 @@
 #include "Motor_Flash.h"
 #include "Motor_Control/Motor_Control.h"
 
+/***********************************************
+ * @brief : 初始化Flash并加载已保存的电机参数
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
 void Motor_Flash_Init(void)
 {
     flash_init();
     (void)Motor_Flash_Load();
 }
 
+/***********************************************
+ * @brief : 从Flash加载并校验电机零点参数
+ * @param : 无
+ * @return: 1表示加载成功，0表示无有效参数
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
 uint8 Motor_Flash_Load(void)
 {
     uint32 Zero_offset;
@@ -45,6 +59,13 @@ uint8 Motor_Flash_Load(void)
     return 1u;
 }
 
+/***********************************************
+ * @brief : 保存当前电机零点参数
+ * @param : 无
+ * @return: 1表示保存成功，0表示保存失败
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
 uint8 Motor_Flash_Save(void)
 {
     if ((Motor.Encoder.Zero_offset > ANGLE_MAX) ||
