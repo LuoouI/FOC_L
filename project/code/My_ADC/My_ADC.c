@@ -252,6 +252,8 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
         Current_Sample_Update(AdcLastRawU, AdcLastRawW);
         if (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC)
         {
+            /* 无感控制不使用编码器反馈，但仍刷新角度供诊断转速计算。 */
+            Angle_Update();
             Current_Sample_Clarke();
         }
         else

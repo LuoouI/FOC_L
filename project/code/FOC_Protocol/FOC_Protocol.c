@@ -10,6 +10,34 @@ static void Foc_Protocol_SendLoopParameters(void);
 static void Foc_Protocol_SendObserverParameters(void);
 static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload);
 static void Foc_Protocol_SendObserverWaveform(void);
+static void Foc_Protocol_HandleReset(void);
+
+/***********************************************
+ * @brief : 计算实测Iq与SMO估算Iq的差值
+ * @param : 无
+ * @return: 实测Iq减去SMO估算Iq，单位为A
+ * @date  : 2026-09-14
+ * @author: L
+ ************************************************/
+static float Foc_Protocol_CalculateObserverIqError(void)
+{
+    Clark_t Observer_clark;
+    Park_t Actual_park;
+    Park_t Observer_park;
+
+    /* 使用同一个编码器电角度，保证实测值与估算值位于相同dq坐标系。 */
+    Actual_park = foc_park_calc(
+        Current.clark,
+        Motor.Encoder.Electrical_angle);
+
+    Observer_clark.Alpha = Motor.SMO.I_alpha_est;
+    Observer_clark.Beta = Motor.SMO.I_beta_est;
+    Observer_park = foc_park_calc(
+        Observer_clark,
+        Motor.Encoder.Electrical_angle);
+
+    return Actual_park.Iq - Observer_park.Iq;
+}
 
 /***********************************************
  * @brief : 读取小端序16位无符号整数
@@ -166,10 +194,24 @@ static void Foc_Protocol_StopControl(void)
 }
 
 /***********************************************
- * @brief : 校验并应用上位机下发的FOC环路参数
+ * @brief : 停止控制输出并触发CM4系统软件复位
+ * @param : 无
+ * @return: 无，不返回
+ * @date  : 2026-09-14
+ * @author: L
+ ************************************************/
+static void Foc_Protocol_HandleReset(void)
+{
+    /* 先清除控制目标，避免复位前仍由控制中断输出非零电压。 */
+    Foc_Protocol_StopControl();
+    NVIC_SystemReset();
+}
+
+/***********************************************
+ * @brief : 校验并应用上位机下发的FOC环路参数，支持运行中更新
  * @param : Payload 44字节参数写入负载
  * @return: 无
- * @date  : 2026-08-29
+ * @date  : 2026-09-14
  * @author: L
  ************************************************/
 static void Foc_Protocol_HandleParameterWrite(const uint8 *Payload)
@@ -185,10 +227,9 @@ static void Foc_Protocol_HandleParameterWrite(const uint8 *Payload)
     float Position_speed_deadband = Foc_Protocol_ReadFloat(&Payload[32]);
     float Position_output_limit = Foc_Protocol_ReadFloat(&Payload[36]);
     float Position_deadband = Foc_Protocol_ReadFloat(&Payload[40]);
+    uint32 Irq_state;                         /* 参数组更新期间的中断状态 */
 
-    /* 控制运行期间不改环路参数，避免PID状态和输出限幅突变。 */
-    if ((Protocol.Enabled != 0u) ||
-        (Current_bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
+    if ((Current_bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
         (Current_bandwidth > FOC_PROTOCOL_CURRENT_BW_MAX_HZ) ||
         (Ramp_rate != Ramp_rate) ||
         (Ramp_rate < 0.0f) ||
@@ -225,6 +266,8 @@ static void Foc_Protocol_HandleParameterWrite(const uint8 *Payload)
         return;
     }
 
+    /* 参数组在控制中断看来必须同时生效，避免拖动期间读到新旧混合配置。 */
+    Irq_state = interrupt_global_disable();
     Motor_Control_SetCurrentBandwidth(Current_bandwidth);
     Motor.Speed_loop.Ramp_rate = Ramp_rate;
     Motor_Control_SetSpeedPi(Speed_kp, Speed_ki, Speed_integral_limit);
@@ -232,8 +275,9 @@ static void Foc_Protocol_HandleParameterWrite(const uint8 *Payload)
                                 Position_output_limit,
                                 Position_deadband,
                                 Position_soft_range,
-                                Position_speed_deadband);
+                                 Position_speed_deadband);
     Motor.Ab_filter_bandwidth = Ab_filter_bandwidth;
+    interrupt_global_enable(Irq_state);
     Protocol.Parameters_seen = 1u;
     Foc_Protocol_SendLoopParameters();
 }
@@ -287,7 +331,7 @@ static void Foc_Protocol_SendLoopParameters(void)
  * @brief : 回传当前生效的SMO和PLL参数
  * @param : 无
  * @return: 无
- * @date  : 2026-09-13
+ * @date  : 2026-09-14
  * @author: L
  ************************************************/
 static void Foc_Protocol_SendObserverParameters(void)
@@ -332,10 +376,10 @@ static void Foc_Protocol_SendObserverParameters(void)
 }
 
 /***********************************************
- * @brief : 校验并应用上位机下发的SMO和PLL参数
+ * @brief : 校验并应用上位机下发的SMO和PLL参数，支持运行中更新
  * @param : Payload 28字节观测器参数写入负载
  * @return: 无
- * @date  : 2026-09-13
+ * @date  : 2026-09-14
  * @author: L
  ************************************************/
 static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload)
@@ -347,10 +391,10 @@ static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload)
     float Pll_ki = Foc_Protocol_ReadFloat(&Payload[16]);
     float Pll_omega_limit = Foc_Protocol_ReadFloat(&Payload[20]);
     float Pll_integral_limit = Foc_Protocol_ReadFloat(&Payload[24]);
+    uint32 Irq_state;                         /* 参数组更新期间的中断状态 */
+    uint8 Observer_was_active;                /* 写入前的SMO有效状态 */
 
-    /* 电机运行期间不改观测器参数，避免估算状态发生突变。 */
-    if ((Protocol.Enabled != 0u) ||
-        (Smo_gain != Smo_gain) ||
+    if ((Smo_gain != Smo_gain) ||
         (Smo_boundary_current != Smo_boundary_current) ||
         (Smo_filter_bandwidth != Smo_filter_bandwidth) ||
         (Pll_kp != Pll_kp) ||
@@ -375,6 +419,13 @@ static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload)
         return;
     }
 
+    Observer_was_active =
+        ((Motor.SMO.K_slide > 0.0f) &&
+         (Motor.SMO.Boundary_current > 0.0f) &&
+         (Motor.SMO.Filter_bandwidth > 0.0f)) ? 1u : 0u;
+
+    /* 在线调参时保留估算电流，首次启用或停机调参时重新建立观测器状态。 */
+    Irq_state = interrupt_global_disable();
     Motor.SMO.K_slide = Smo_gain;
     Motor.SMO.Boundary_current = Smo_boundary_current;
     Motor.SMO.Filter_bandwidth = Smo_filter_bandwidth;
@@ -383,15 +434,29 @@ static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload)
     Motor.SMO.PLL.Omega_limit = Pll_omega_limit;
     Motor.SMO.PLL.Intergal_limit = Pll_integral_limit;
 
-    /* 调参后重新初始化观测器状态，避免沿用旧参数下的积分和估算值。 */
-    Motor.SMO.Ready = 0u;
-    Motor.SMO.U_alpha_pre = 0.0f;
-    Motor.SMO.U_beta_pre = 0.0f;
-    Motor.SMO.PLL.integral_sum = 0.0f;
-    Motor.SMO.PLL.Phase_error = 0.0f;
-    Motor.SMO.PLL.Omega_est = 0.0f;
-    Motor.SMO.PLL.Mechanical_angle_est = 0u;
-    Motor.SMO.PLL.Electrical_angle_est = 0u;
+    if ((Protocol.Enabled == 0u) || (Observer_was_active == 0u))
+    {
+        Motor.SMO.Ready = 0u;
+        Motor.SMO.U_alpha_pre = 0.0f;
+        Motor.SMO.U_beta_pre = 0.0f;
+        Motor.SMO.PLL.integral_sum = 0.0f;
+        Motor.SMO.PLL.Phase_error = 0.0f;
+        Motor.SMO.PLL.Omega_est = 0.0f;
+        Motor.SMO.PLL.Mechanical_angle_est = 0u;
+        Motor.SMO.PLL.Electrical_angle_est = 0u;
+    }
+    else
+    {
+        Motor.SMO.PLL.integral_sum = Float_Limit(
+            Motor.SMO.PLL.integral_sum,
+            -Pll_integral_limit,
+            Pll_integral_limit);
+        Motor.SMO.PLL.Omega_est = Float_Limit(
+            Motor.SMO.PLL.Omega_est,
+            -Pll_omega_limit,
+            Pll_omega_limit);
+    }
+    interrupt_global_enable(Irq_state);
     Foc_Protocol_SendObserverParameters();
 }
 
@@ -732,10 +797,10 @@ static void Foc_Protocol_SendTelemetry(void)
     }
     Foc_Protocol_WriteU32(&Payload[4], Protocol.Time_ms);
     Foc_Protocol_WriteFloat(&Payload[8], Speed_target);
+    /* 无感模式保留编码器速度，仅供上位机与估算转速对照。 */
     Foc_Protocol_WriteFloat(
         &Payload[12],
-        (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC) ?
-        0.0f : Motor.Encoder.Spd_rpm);
+        Motor.Encoder.Spd_rpm);
     Foc_Protocol_WriteFloat(
         &Payload[16],
         Motor.Current_loop.Id_target);
@@ -806,10 +871,10 @@ static void Foc_Protocol_SendWaveform(void)
 }
 
 /***********************************************
- * @brief : 打包并发送SMO和PLL观测器波形
+ * @brief : 打包并发送SMO和PLL观测器波形及Iq误差
  * @param : 无
  * @return: 无
- * @date  : 2026-09-13
+ * @date  : 2026-09-14
  * @author: L
  ************************************************/
 static void Foc_Protocol_SendObserverWaveform(void)
@@ -820,6 +885,7 @@ static void Foc_Protocol_SendObserverWaveform(void)
     float Mechanical_angle;
     float Electrical_angle;
     float Phase_error_degree;
+    float Iq_error;
 
     memset(Frame, 0, sizeof(Frame));
     Frame[0] = 0xaau;
@@ -837,6 +903,7 @@ static void Foc_Protocol_SendObserverWaveform(void)
                        360.0f / (float)ANGLE_PERIOD;
     Phase_error_degree = Motor.SMO.PLL.Phase_error *
                          360.0f / TWO_PI;
+    Iq_error = Foc_Protocol_CalculateObserverIqError();
 
     Foc_Protocol_WriteU32(&Payload[0], Protocol.Time_ms);
     Foc_Protocol_WriteFloat(&Payload[4], Motor.SMO.I_alpha_est);
@@ -853,9 +920,10 @@ static void Foc_Protocol_SendObserverWaveform(void)
     Foc_Protocol_WriteFloat(&Payload[32], Electrical_angle);
     Foc_Protocol_WriteFloat(&Payload[36], Motor.SMO.PLL.Omega_est);
     Foc_Protocol_WriteFloat(&Payload[40], Phase_error_degree);
-    /* 将实际Clarke电流追加到负载末尾，保持既有SMO/PLL字段偏移不变。 */
+    /* 将实际Clarke电流和Iq误差追加到负载末尾，保持既有字段偏移不变。 */
     Foc_Protocol_WriteFloat(&Payload[44], Current.clark.Alpha);
     Foc_Protocol_WriteFloat(&Payload[48], Current.clark.Beta);
+    Foc_Protocol_WriteFloat(&Payload[52], Iq_error);
 
     Crc = Foc_Protocol_Crc16(
         &Frame[2],
@@ -988,6 +1056,11 @@ static void Foc_Protocol_HandleFrame(const uint8 *Frame, uint16 Length)
         Foc_Protocol_StopControl();
         Zero_Calibration();
     }
+    else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_RESET) &&
+             (Payload_length == 0u))
+    {
+        Foc_Protocol_HandleReset();
+    }
 }
 
 /***********************************************
@@ -1102,8 +1175,10 @@ void Foc_Protocol_Service(void)
         ((uint32)(Current_ms - Protocol.Last_telemetry_ms) >=
          FOC_PROTOCOL_TELEMETRY_PERIOD_MS))
     {
+        /* 发送接口为阻塞式，每次只发送一帧，给接收环形缓冲留出处理机会。 */
         Protocol.Last_telemetry_ms = Current_ms;
         Foc_Protocol_SendTelemetry();
+        return;
     }
 
     if ((Protocol.Control_seen != 0u) &&
@@ -1112,6 +1187,7 @@ void Foc_Protocol_Service(void)
     {
         Protocol.Last_waveform_ms = Current_ms;
         Foc_Protocol_SendWaveform();
+        return;
     }
 
     if ((Protocol.Control_seen != 0u) &&

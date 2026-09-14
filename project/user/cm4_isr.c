@@ -53,11 +53,10 @@ void pit0_ch2_isr()                     // 定时器通道 2 周期中断服务�
     pit_isr_flag_clear(PIT_CH2);
     
     VBUS_Get();    // 获取母线电压
-    if (Motor.Control_mode != MOTOR_CONTROL_SENSORLESS_FOC)
-    {
-        RPM_Cal();      // 转速计算
-        Motor_Torque_Estimate(Current.park.Iq); // 估算电机转矩
-    }
+    RPM_Cal();      // 转速计算
+
+    Motor_Torque_Estimate(Current.park.Iq); // 估算电机转矩
+
     Foc_Protocol_Tick1ms(); // 更新上位机协议时间基准
 
 }
@@ -73,8 +72,8 @@ void pit0_ch11_isr()                    // 定时器通道 11 周期中断服务
 {
     pit_isr_flag_clear(PIT_CH11);
     
-    // // 按键扫描
-    // key_scanner();
+    // // 按键扫描  若要使用按键需要按键初始化
+    // key_scanner();   
 
     // LED服务函数
     My_LED_CheckVoltage();

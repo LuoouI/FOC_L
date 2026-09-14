@@ -10,6 +10,7 @@
 #define FOC_PROTOCOL_FRAME_TYPE_OBSERVER_PARAMETER_READ (0x13u)         /* SMO/PLL参数读取帧 */
 #define FOC_PROTOCOL_FRAME_TYPE_SONG_LIST (0x14u)                       /* 内置乐曲列表查询和响应帧 */
 #define FOC_PROTOCOL_FRAME_TYPE_ZERO_CAL  (0x15u)                       /* 编码器零点校准命令帧 */
+#define FOC_PROTOCOL_FRAME_TYPE_RESET     (0x16u)                       /* 驱动板软件复位命令帧 */
 #define FOC_PROTOCOL_FRAME_TYPE_TELEMETRY (0x20u)                       /* 基础遥测数据帧 */
 #define FOC_PROTOCOL_FRAME_TYPE_WAVEFORM  (0x21u)                       /* 高速波形采样帧 */
 #define FOC_PROTOCOL_FRAME_TYPE_OBSERVER_WAVEFORM (0x22u)               /* SMO/PLL观测波形帧 */
@@ -19,7 +20,7 @@
 #define FOC_PROTOCOL_OBSERVER_PARAMETER_LENGTH (28u)                    /* SMO/PLL参数负载长度 */
 #define FOC_PROTOCOL_TELEMETRY_LENGTH     (56u)                         /* 基础遥测负载长度 */
 #define FOC_PROTOCOL_WAVEFORM_LENGTH      (36u)                         /* 高速波形负载长度 */
-#define FOC_PROTOCOL_OBSERVER_WAVEFORM_LENGTH (52u)                     /* SMO/PLL观测波形负载长度 */
+#define FOC_PROTOCOL_OBSERVER_WAVEFORM_LENGTH (56u)                     /* SMO/PLL观测波形负载长度 */
 #define FOC_PROTOCOL_FRAME_MAX            (64u)                         /* 接收帧最大字节数 */
 #define FOC_PROTOCOL_SONG_NAME_MAX        (48u)                         /* 单个UTF-8乐曲名称最大字节数 */
 #define FOC_PROTOCOL_TIMEOUT_MS           (200u)                        /* 控制心跳超时时间 */

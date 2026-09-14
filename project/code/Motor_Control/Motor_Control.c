@@ -88,7 +88,7 @@ Foc_motor_t Motor =
         .Boundary_current = 0.0f,
         .Filter_bandwidth = 500.0f,
         .A = (2.0f * LS * 0.001f - RS * FOC_TS) / DENOMINATOR,
-        .B = FOC_TS / DENOMINATOR,
+        .B = 2.0 * FOC_TS / DENOMINATOR,
         .PLL = 
         {
             .Kp = 0.0f,

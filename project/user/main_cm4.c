@@ -70,7 +70,7 @@ int main(void)
     for(;;)
     {
         Foc_Protocol_Service();          // 主循环处理串口接收和遥测发送
-  
+
     }
 }
 
