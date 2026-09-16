@@ -1,5 +1,6 @@
 #include "My_ADC.h"
 #include "Current_sample/Current_sample.h"
+#include "Foc_Protocol/Foc_Protocol.h"
 #include "Motor_Control/Motor_Control.h"
 #include "adc/cy_adc.h"
 #include "trigmux/cy_trigmux.h"
@@ -262,6 +263,7 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
             Current_Sample_Transform(Motor.Encoder.Electrical_angle);
         }
         Motor_Control_Loop();
+        Foc_Protocol_CaptureObserverStream();
     }
 }
 

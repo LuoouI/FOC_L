@@ -24,6 +24,10 @@
 #define MOTOR_CURRENT_VECTOR_LIMIT_A     (10.0f)        /* d/q轴电流矢量固定限幅，单位为A */
 #define MOTOR_AB_FILTER_BW_MIN_HZ        (1.0f)         /* AB滤波器带宽下限，单位为Hz */
 #define MOTOR_AB_FILTER_BW_MAX_HZ        (500.0f)       /* AB滤波器带宽上限，单位为Hz */
+#define MOTOR_PLL_EMF_MIN_V              (0.02f)        /* PLL允许鉴相的最小反电动势幅值，单位为V */
+#define MOTOR_PLL_DAMPING_RATIO          (0.70710678f)  /* PLL固定阻尼比 */
+#define MOTOR_PLL_OMEGA_LIMIT_RAD_S      (3000.0f)      /* PLL固定电角速度限幅，单位为rad/s */
+#define MOTOR_PLL_INTEGRAL_LIMIT_RAD_S   (3000.0f)      /* PLL固定积分项限幅，单位为rad/s */
 
 /*===========================================================================*/
 /*  电机零点校准参数                                                          */
@@ -159,17 +163,19 @@ typedef struct
 /*===========================================================================*/
 typedef struct
 {
-    float Kp;                               /* PLL比例增益 */
-    float Ki;                               /* PLL积分增益 */
-    float integral_sum;                     /* PLL积分累加量 */
-    float Phase_error;                      /* PLL相位误差，单位为rad */
+    float Bandwidth;                        /* PLL自然频率带宽，单位为Hz */
+    float Kp;                               /* 由带宽计算的PLL比例增益，单位为rad/s */
+    float Ki;                               /* 由带宽计算的PLL积分增益，单位为rad/s^2 */
+    float Integral_sum;                     /* PLL积分项，单位为rad/s */
+    float Phase_error;                      /* PLL鉴相误差，单位为rad */
 
     uint16 Mechanical_angle_est;            /* 估算机械角度，范围0~32767 */
     uint16 Electrical_angle_est;            /* 估算电角度，范围0~32767 */
 
     float Omega_est;                        /* 估算电角速度，单位为rad/s */
-    float Omega_limit;                      /* 电角速度限幅，单位为rad/s */
-    float Intergal_limit;                   /* 积分项限幅 */
+    float Mechanical_angle_rad;             /* PLL内部机械角度，单位为rad */
+    float Electrical_angle_rad;             /* PLL内部未补偿电角度，单位为rad */
+    int8 Direction;                         /* 当前观测方向，取值为+1或-1 */
 
 }PLL_t;
 
@@ -250,10 +256,12 @@ void    Motor_Control_SetPositionKp                 (float Kp,
                                                      float Deadband_degree,
                                                      float SoftRange_degree,
                                                      float SpeedDeadband_rpm);
+void    Motor_Control_SetPllBandwidth               (float Bandwidth_hz);
 void    Angle_Update                                (void);
 float   Motor_Control_GetMechanicalDegree           (void);
 void    RPM_Cal                                     (void);
 void    Zero_Calibration                            (void);
+void    Motor_Control_ResetObserver                 (void);
 void    Motor_Control_Loop                          (void);
 /*==================================================== 基础函数 ====================================================*/
 

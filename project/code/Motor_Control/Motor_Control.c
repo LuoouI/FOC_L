@@ -2,6 +2,7 @@
 #include "float.h"
 #include "Current_sample/Current_sample.h"
 #include "Filter/AB_Filter.h"
+#include "Fast_sin/Fast_sin.h"
 #include "Foc_voice/Foc_voice.h"
 #include "Motor_Flash/Motor_Flash.h"
 #include "My_TCPWM/My_TCPWM.h"
@@ -84,22 +85,24 @@ Foc_motor_t Motor =
         .E_beta = 0.0f,
         .E_beta_filter = 0.0f,
         .E_alpha_filter = 0.0f,
-        .K_slide = 0.0f,
-        .Boundary_current = 0.0f,
+        .K_slide = 1.80f,
+        .Boundary_current = 1.5f,
         .Filter_bandwidth = 500.0f,
         .A = (2.0f * LS * 0.001f - RS * FOC_TS) / DENOMINATOR,
         .B = 2.0 * FOC_TS / DENOMINATOR,
         .PLL = 
         {
-            .Kp = 0.0f,
-            .Ki = 0.0f,
-            .integral_sum = 0.0f,
+            .Bandwidth = 250.0f,
+            .Kp = 177.7f,
+            .Ki = 15791.4f,
+            .Integral_sum = 0.0f,
             .Phase_error = 0.0f,
             .Mechanical_angle_est = 0u,
             .Electrical_angle_est = 0u,
             .Omega_est = 0.0f,
-            .Omega_limit = 0.0f,
-            .Intergal_limit = 0.0f
+            .Mechanical_angle_rad = 0.0f,
+            .Electrical_angle_rad = 0.0f,
+            .Direction = 1
         }
     },
     .Ab_filter_bandwidth = 50.0f,
@@ -1103,6 +1106,8 @@ void Motor_Control_Init(void)
         Motor.Position_loop.Deadband_degree,
         Motor.Position_loop.Soft_range_degree,
         Motor.Position_loop.Speed_deadband_rpm);
+    Motor_Control_SetPllBandwidth(Motor.SMO.PLL.Bandwidth);
+    Motor_Control_ResetObserver();
 }
 
 /***********************************************
@@ -1201,6 +1206,31 @@ void Motor_Control_SetPositionKp(float Kp,
     Motor.Position_loop.Speed_deadband_rpm = SpeedDeadband_rpm;
 }
 
+/***********************************************
+ * @brief : 根据自然频率带宽和固定阻尼比更新PLL内部PI增益
+ * @param : Bandwidth_hz PLL自然频率带宽，单位为Hz
+ * @return: 无
+ * @date  : 2026-09-15
+ * @author: L
+ ************************************************/
+void Motor_Control_SetPllBandwidth(float Bandwidth_hz)
+{
+    float Natural_omega = TWO_PI * Bandwidth_hz;
+
+    Motor.SMO.PLL.Bandwidth = Bandwidth_hz;
+    Motor.SMO.PLL.Kp =
+        2.0f * MOTOR_PLL_DAMPING_RATIO * Natural_omega;
+    Motor.SMO.PLL.Ki = Natural_omega * Natural_omega;
+    Motor.SMO.PLL.Integral_sum = Float_Limit(
+        Motor.SMO.PLL.Integral_sum,
+        -MOTOR_PLL_INTEGRAL_LIMIT_RAD_S,
+        MOTOR_PLL_INTEGRAL_LIMIT_RAD_S);
+    Motor.SMO.PLL.Omega_est = Float_Limit(
+        Motor.SMO.PLL.Omega_est,
+        -MOTOR_PLL_OMEGA_LIMIT_RAD_S,
+        MOTOR_PLL_OMEGA_LIMIT_RAD_S);
+}
+
 /*===========================================================================*/
 /*  无感FOC                                                                  */
 /*===========================================================================*/
@@ -1244,6 +1274,244 @@ static void Sensorless_Observer_UpdateVoltage(void)
     /* 三相电压和为零时，Alpha/Beta轴电压由A、B相直接换算。 */
     Motor.SMO.U_alpha_pre = Phase_voltage_a;
     Motor.SMO.U_beta_pre = (Phase_voltage_a + 2.0f * Phase_voltage_b) / SQRT3;
+}
+
+/***********************************************
+ * @brief : 清除SMO和PLL动态状态，等待下一组电流样本重新初始化
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-09-15
+ * @author: L
+ ************************************************/
+void Motor_Control_ResetObserver(void)
+{
+    Motor.SMO.I_alpha_est = 0.0f;
+    Motor.SMO.I_beta_est = 0.0f;
+    Motor.SMO.I_alpha_estpre = 0.0f;
+    Motor.SMO.I_beta_estpre = 0.0f;
+    Motor.SMO.U_alpha_pre = 0.0f;
+    Motor.SMO.U_beta_pre = 0.0f;
+    Motor.SMO.E_alpha = 0.0f;
+    Motor.SMO.E_beta = 0.0f;
+    Motor.SMO.E_alpha_filter = 0.0f;
+    Motor.SMO.E_beta_filter = 0.0f;
+    Motor.SMO.Ready = 0u;
+
+    Motor.SMO.PLL.Integral_sum = 0.0f;
+    Motor.SMO.PLL.Phase_error = 0.0f;
+    Motor.SMO.PLL.Mechanical_angle_est = 0u;
+    Motor.SMO.PLL.Electrical_angle_est = 0u;
+    Motor.SMO.PLL.Omega_est = 0.0f;
+    Motor.SMO.PLL.Mechanical_angle_rad = 0.0f;
+    Motor.SMO.PLL.Electrical_angle_rad = 0.0f;
+    Motor.SMO.PLL.Direction = (Motor.Foc_direction < 0) ? -1 : 1;
+}
+
+/***********************************************
+ * @brief : 根据当前控制状态确定PLL反电动势方向
+ * @param : 无
+ * @return: 观测方向，返回+1表示正转，返回-1表示反转
+ * @date  : 2026-09-15
+ * @author: L
+ ************************************************/
+static int8 Sensorless_PLL_GetDirection(void)
+{
+    if (Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC)
+    {
+        if (Motor.Encoder.Spd_rpm > 1.0f)
+        {
+            return 1;
+        }
+        if (Motor.Encoder.Spd_rpm < -1.0f)
+        {
+            return -1;
+        }
+    }
+
+    if (Motor.Foc_mode == MOTOR_FOC_SPEED)
+    {
+        if (Motor.Speed_loop.Command_rpm > 0.0f)
+        {
+            return 1;
+        }
+        if (Motor.Speed_loop.Command_rpm < 0.0f)
+        {
+            return -1;
+        }
+    }
+    else if (Motor.Foc_mode == MOTOR_FOC_CURRENT)
+    {
+        if (Motor.Current_loop.Iq_target > 0.0f)
+        {
+            return 1;
+        }
+        if (Motor.Current_loop.Iq_target < 0.0f)
+        {
+            return -1;
+        }
+    }
+
+    return (Motor.SMO.PLL.Direction < 0) ? -1 : 1;
+}
+
+/***********************************************
+ * @brief : 有感模式下使用编码器选择PLL机械角所属的磁极扇区
+ * @param : Mechanical_output_rad PLL输出机械角，单位为rad
+ * @return: 扇区对齐后的PLL机械角，单位为rad
+ * @date  : 2026-09-16
+ * @author: L
+ ************************************************/
+static float Sensorless_PLL_AlignMechanicalSector(float Mechanical_output_rad)
+{
+    float Mechanical_actual_rad;
+    float Sector_period_rad;
+    float Sector_error_rad;
+    int32 Sector_offset;
+
+    if ((Motor.Control_mode != MOTOR_CONTROL_ENCODER_FOC) ||
+        (Motor.Pole_pairs == 0u))
+    {
+        return Mechanical_output_rad;
+    }
+
+    Mechanical_actual_rad =
+        Motor_Control_GetMechanicalDegree() * TWO_PI / 360.0f;
+    Sector_period_rad = TWO_PI / (float)Motor.Pole_pairs;
+    Sector_error_rad = Mechanical_actual_rad - Mechanical_output_rad;
+    if (Sector_error_rad > PI)
+    {
+        Sector_error_rad -= TWO_PI;
+    }
+    else if (Sector_error_rad < -PI)
+    {
+        Sector_error_rad += TWO_PI;
+    }
+
+    /* 只补偿整磁极周期，保留PLL自身的连续相位误差用于观测。 */
+    Sector_offset = (Sector_error_rad >= 0.0f) ?
+                    (int32)(Sector_error_rad / Sector_period_rad + 0.5f) :
+                    (int32)(Sector_error_rad / Sector_period_rad - 0.5f);
+
+    return Mechanical_output_rad +
+           (float)Sector_offset * Sector_period_rad;
+}
+
+/***********************************************
+ * @brief : 使用滤波后的Alpha/Beta轴反电动势更新PLL角度和电角速度
+ * @param : 无
+ * @return: 无，估算结果保存到Motor.SMO.PLL
+ * @date  : 2026-09-15
+ * @author: L
+ ************************************************/
+static void Sensorless_PLL_Update(void)
+{
+    PLL_t *Pll = &Motor.SMO.PLL;
+    float E_alpha = Motor.SMO.E_alpha_filter;
+    float E_beta = Motor.SMO.E_beta_filter;
+    float Emf_amplitude;
+    float Sin_theta;
+    float Cos_theta;
+    float Integral_next;
+    float Omega_unsaturated;
+    float Filter_omega;
+    float Phase_compensation;
+    float Electrical_output_rad;
+    float Mechanical_output_rad;
+    int32 Electrical_angle_count;
+    int32 Mechanical_angle_count;
+    uint16 Electrical_angle_raw;
+
+    if ((Pll->Bandwidth <= 0.0f) ||
+        (Pll->Kp < 0.0f) ||
+        (Pll->Ki < 0.0f) ||
+        (Motor.SMO.Filter_bandwidth <= 0.0f) ||
+        (Motor.Pole_pairs == 0u))
+    {
+        Pll->Integral_sum = 0.0f;
+        Pll->Phase_error = 0.0f;
+        Pll->Omega_est = 0.0f;
+        return;
+    }
+
+    Emf_amplitude = sqrtf(E_alpha * E_alpha + E_beta * E_beta);
+    if (!(Emf_amplitude >= MOTOR_PLL_EMF_MIN_V))
+    {
+        Pll->Integral_sum = 0.0f;
+        Pll->Phase_error = 0.0f;
+        Pll->Omega_est = 0.0f;
+        return;
+    }
+
+    Pll->Direction = Sensorless_PLL_GetDirection();
+    Electrical_angle_count = (int32)(
+        Pll->Electrical_angle_rad * (float)ANGLE_PERIOD / TWO_PI);
+    Electrical_angle_raw = Angle_Wrap(Electrical_angle_count);
+    Sin_theta = fast_sinf(Electrical_angle_raw);
+    Cos_theta = fast_cosf(Electrical_angle_raw);
+
+    /* 方向补偿后，归一化q轴反电动势等于sin(实际角度-估算角度)。 */
+    Pll->Phase_error =
+        (float)Pll->Direction *
+        (-E_alpha * Cos_theta - E_beta * Sin_theta) /
+        Emf_amplitude;
+    Pll->Phase_error = Float_Limit(Pll->Phase_error, -1.0f, 1.0f);
+    Pll->Phase_error = asinf(Pll->Phase_error);
+
+    Integral_next =
+        Pll->Integral_sum + Pll->Ki * Pll->Phase_error * FOC_TS;
+    Integral_next = Float_Limit(
+        Integral_next,
+        -MOTOR_PLL_INTEGRAL_LIMIT_RAD_S,
+        MOTOR_PLL_INTEGRAL_LIMIT_RAD_S);
+    Omega_unsaturated =
+        Pll->Kp * Pll->Phase_error + Integral_next;
+    if (!(((Omega_unsaturated > MOTOR_PLL_OMEGA_LIMIT_RAD_S) &&
+           (Pll->Phase_error > 0.0f)) ||
+          ((Omega_unsaturated < -MOTOR_PLL_OMEGA_LIMIT_RAD_S) &&
+           (Pll->Phase_error < 0.0f))))
+    {
+        Pll->Integral_sum = Integral_next;
+    }
+    Pll->Omega_est = Float_Limit(
+        Pll->Kp * Pll->Phase_error + Pll->Integral_sum,
+        -MOTOR_PLL_OMEGA_LIMIT_RAD_S,
+        MOTOR_PLL_OMEGA_LIMIT_RAD_S);
+
+    Pll->Electrical_angle_rad += Pll->Omega_est * FOC_TS;
+    Pll->Mechanical_angle_rad +=
+        Pll->Omega_est * FOC_TS / (float)Motor.Pole_pairs;
+    while (Pll->Electrical_angle_rad >= TWO_PI)
+    {
+        Pll->Electrical_angle_rad -= TWO_PI;
+    }
+    while (Pll->Electrical_angle_rad < 0.0f)
+    {
+        Pll->Electrical_angle_rad += TWO_PI;
+    }
+    while (Pll->Mechanical_angle_rad >= TWO_PI)
+    {
+        Pll->Mechanical_angle_rad -= TWO_PI;
+    }
+    while (Pll->Mechanical_angle_rad < 0.0f)
+    {
+        Pll->Mechanical_angle_rad += TWO_PI;
+    }
+
+    /* 补偿反电动势一阶低通产生的随转速变化的相位滞后。 */
+    Filter_omega = TWO_PI * Motor.SMO.Filter_bandwidth;
+    Phase_compensation = atan2f(Pll->Omega_est, Filter_omega);
+    Electrical_output_rad = Pll->Electrical_angle_rad + Phase_compensation;
+    Mechanical_output_rad =
+        Pll->Mechanical_angle_rad +
+        Phase_compensation / (float)Motor.Pole_pairs;
+    Mechanical_output_rad =
+        Sensorless_PLL_AlignMechanicalSector(Mechanical_output_rad);
+    Electrical_angle_count = (int32)(
+        Electrical_output_rad * (float)ANGLE_PERIOD / TWO_PI);
+    Mechanical_angle_count = (int32)(
+        Mechanical_output_rad * (float)ANGLE_PERIOD / TWO_PI);
+    Pll->Electrical_angle_est = Angle_Wrap(Electrical_angle_count);
+    Pll->Mechanical_angle_est = Angle_Wrap(Mechanical_angle_count);
 }
 
 /***********************************************
@@ -1316,6 +1584,8 @@ static void Back_emf_Cal(void)
     Motor.SMO.E_beta_filter +=
         Filter_coefficient *
         (Motor.SMO.E_beta - Motor.SMO.E_beta_filter);
+
+    Sensorless_PLL_Update();
 }
 
 /*===========================================================================*/
@@ -1359,6 +1629,7 @@ void Motor_Control_Loop(void)
             Motor.Current_loop.Uq_output = 0.0f;
             PID_Clear(&Motor.Current_loop.Id_pid);
             PID_Clear(&Motor.Current_loop.Iq_pid);
+            Motor_Control_ResetObserver();
             Motor_openloop_set(0.0f, 0.0f, 0);
         }
     }

@@ -15,7 +15,8 @@ void My_Key_Service(void)
     if (KEY_SHORT_PRESS == key_get_state(KEY_2))
     {
         Motor.Control_mode = MOTOR_CONTROL_ENCODER_FOC;
-        Motor.Encoder.Spd_rpm = 3000;
+        Motor.Foc_mode = MOTOR_FOC_SPEED;
+        Motor.Speed_loop.Command_rpm = 1000.0f;
     }
 
     if (KEY_SHORT_PRESS == key_get_state(KEY_3))
@@ -23,7 +24,7 @@ void My_Key_Service(void)
         key_clear_state(KEY_3);
         Motor.Control_mode = MOTOR_CONTROL_ENCODER_FOC;
         Motor.Foc_mode = MOTOR_FOC_SPEED;
-        Motor.Speed_loop.Command_rpm = 3000.0f;
+        Motor.Speed_loop.Command_rpm = 1000.0f;
 
     }
 

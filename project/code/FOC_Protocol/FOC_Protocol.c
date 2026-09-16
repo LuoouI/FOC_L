@@ -10,6 +10,14 @@ static void Foc_Protocol_SendLoopParameters(void);
 static void Foc_Protocol_SendObserverParameters(void);
 static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload);
 static void Foc_Protocol_SendObserverWaveform(void);
+static uint8 Foc_Protocol_CountObserverStreamFields(uint16 Mask);
+static uint16 Foc_Protocol_AppendObserverStreamFloat(uint8 *Payload,
+                                                     uint16 Offset,
+                                                     uint16 Field_mask,
+                                                     float Value);
+static uint8 Foc_Protocol_SendObserverStreamBatch(void);
+static void Foc_Protocol_HandleObserverStreamConfig(const uint8 *Payload,
+                                                     uint16 Payload_length);
 static void Foc_Protocol_HandleReset(void);
 
 /***********************************************
@@ -159,6 +167,32 @@ static uint16 Foc_Protocol_Crc16(const uint8 *Data, uint16 Length)
 }
 
 /***********************************************
+ * @brief : 控制帧超时时快速撤销电压输出并安排完整停机清理
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-09-16
+ * @author: L
+ ************************************************/
+static void Foc_Protocol_ForceTimeoutSafeOutput(void)
+{
+    /* 该函数在1 ms中断中执行，只修改停机必需状态，完整清理由主循环完成。 */
+    Motor.Control_mode = MOTOR_CONTROL_OPEN_LOOP;
+    Motor.Open_loop.Uq = 0.0f;
+    Motor.Open_loop.Step = 0;
+    Motor.Open_loop.Hold_count = 0u;
+    Motor.Open_loop.Started = 0u;
+    Motor.Current_loop.Id_target = 0.0f;
+    Motor.Current_loop.Iq_target = 0.0f;
+    Motor.Speed_loop.Command_rpm = 0.0f;
+    Motor.Speed_loop.Target_rpm = 0.0f;
+    Protocol.Enabled = 0u;
+    Protocol.Voice_selected = 0u;
+    Protocol.Rearm_required = 1u;
+    Protocol.Timeout_cleanup_pending = 1u;
+    Protocol.Observer_sample_read = Protocol.Observer_sample_write;
+}
+
+/***********************************************
  * @brief : 停止当前控制输出并恢复开环停止状态
  * @param : 无
  * @return: 无
@@ -189,6 +223,7 @@ static void Foc_Protocol_StopControl(void)
     PID_Clear(&Motor.Current_loop.Iq_pid);
     PID_Clear(&Motor.Speed_loop.Pid);
     PID_Clear(&Motor.Position_loop.Pid);
+    Motor_Control_ResetObserver();
     Protocol.Enabled = 0u;
     Protocol.Voice_selected = 0u;
 }
@@ -357,14 +392,7 @@ static void Foc_Protocol_SendObserverParameters(void)
     Foc_Protocol_WriteFloat(
         &Payload[8],
         Motor.SMO.Filter_bandwidth);
-    Foc_Protocol_WriteFloat(&Payload[12], Motor.SMO.PLL.Kp);
-    Foc_Protocol_WriteFloat(&Payload[16], Motor.SMO.PLL.Ki);
-    Foc_Protocol_WriteFloat(
-        &Payload[20],
-        Motor.SMO.PLL.Omega_limit);
-    Foc_Protocol_WriteFloat(
-        &Payload[24],
-        Motor.SMO.PLL.Intergal_limit);
+    Foc_Protocol_WriteFloat(&Payload[12], Motor.SMO.PLL.Bandwidth);
 
     Crc = Foc_Protocol_Crc16(
         &Frame[2],
@@ -377,7 +405,7 @@ static void Foc_Protocol_SendObserverParameters(void)
 
 /***********************************************
  * @brief : 校验并应用上位机下发的SMO和PLL参数，支持运行中更新
- * @param : Payload 28字节观测器参数写入负载
+ * @param : Payload 16字节观测器参数写入负载
  * @return: 无
  * @date  : 2026-09-14
  * @author: L
@@ -387,34 +415,23 @@ static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload)
     float Smo_gain = Foc_Protocol_ReadFloat(&Payload[0]);
     float Smo_boundary_current = Foc_Protocol_ReadFloat(&Payload[4]);
     float Smo_filter_bandwidth = Foc_Protocol_ReadFloat(&Payload[8]);
-    float Pll_kp = Foc_Protocol_ReadFloat(&Payload[12]);
-    float Pll_ki = Foc_Protocol_ReadFloat(&Payload[16]);
-    float Pll_omega_limit = Foc_Protocol_ReadFloat(&Payload[20]);
-    float Pll_integral_limit = Foc_Protocol_ReadFloat(&Payload[24]);
+    float Pll_bandwidth = Foc_Protocol_ReadFloat(&Payload[12]);
     uint32 Irq_state;                         /* 参数组更新期间的中断状态 */
     uint8 Observer_was_active;                /* 写入前的SMO有效状态 */
+    uint8 Observer_is_active;                 /* 写入后的SMO有效状态 */
 
     if ((Smo_gain != Smo_gain) ||
         (Smo_boundary_current != Smo_boundary_current) ||
         (Smo_filter_bandwidth != Smo_filter_bandwidth) ||
-        (Pll_kp != Pll_kp) ||
-        (Pll_ki != Pll_ki) ||
-        (Pll_omega_limit != Pll_omega_limit) ||
-        (Pll_integral_limit != Pll_integral_limit) ||
+        (Pll_bandwidth != Pll_bandwidth) ||
         (Smo_gain < 0.0f) ||
         (Smo_gain > FOC_PROTOCOL_SMO_GAIN_MAX) ||
         (Smo_boundary_current < 0.0f) ||
         (Smo_boundary_current > FOC_PROTOCOL_SMO_BOUNDARY_CURRENT_MAX) ||
         (Smo_filter_bandwidth < FOC_PROTOCOL_SMO_FILTER_BW_MIN) ||
         (Smo_filter_bandwidth > FOC_PROTOCOL_SMO_FILTER_BW_MAX) ||
-        (Pll_kp < 0.0f) ||
-        (Pll_kp > FOC_PROTOCOL_PLL_GAIN_MAX) ||
-        (Pll_ki < 0.0f) ||
-        (Pll_ki > FOC_PROTOCOL_PLL_GAIN_MAX) ||
-        (Pll_omega_limit < 0.0f) ||
-        (Pll_omega_limit > FOC_PROTOCOL_PLL_OMEGA_MAX) ||
-        (Pll_integral_limit < 0.0f) ||
-        (Pll_integral_limit > FOC_PROTOCOL_PLL_INTEGRAL_MAX))
+        (Pll_bandwidth < FOC_PROTOCOL_PLL_BW_MIN) ||
+        (Pll_bandwidth > FOC_PROTOCOL_PLL_BW_MAX))
     {
         return;
     }
@@ -423,38 +440,23 @@ static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload)
         ((Motor.SMO.K_slide > 0.0f) &&
          (Motor.SMO.Boundary_current > 0.0f) &&
          (Motor.SMO.Filter_bandwidth > 0.0f)) ? 1u : 0u;
+    Observer_is_active =
+        ((Smo_gain > 0.0f) &&
+         (Smo_boundary_current > 0.0f) &&
+         (Smo_filter_bandwidth > 0.0f)) ? 1u : 0u;
 
     /* 在线调参时保留估算电流，首次启用或停机调参时重新建立观测器状态。 */
     Irq_state = interrupt_global_disable();
     Motor.SMO.K_slide = Smo_gain;
     Motor.SMO.Boundary_current = Smo_boundary_current;
     Motor.SMO.Filter_bandwidth = Smo_filter_bandwidth;
-    Motor.SMO.PLL.Kp = Pll_kp;
-    Motor.SMO.PLL.Ki = Pll_ki;
-    Motor.SMO.PLL.Omega_limit = Pll_omega_limit;
-    Motor.SMO.PLL.Intergal_limit = Pll_integral_limit;
+    Motor_Control_SetPllBandwidth(Pll_bandwidth);
 
-    if ((Protocol.Enabled == 0u) || (Observer_was_active == 0u))
+    if ((Protocol.Enabled == 0u) ||
+        (Observer_was_active == 0u) ||
+        (Observer_is_active == 0u))
     {
-        Motor.SMO.Ready = 0u;
-        Motor.SMO.U_alpha_pre = 0.0f;
-        Motor.SMO.U_beta_pre = 0.0f;
-        Motor.SMO.PLL.integral_sum = 0.0f;
-        Motor.SMO.PLL.Phase_error = 0.0f;
-        Motor.SMO.PLL.Omega_est = 0.0f;
-        Motor.SMO.PLL.Mechanical_angle_est = 0u;
-        Motor.SMO.PLL.Electrical_angle_est = 0u;
-    }
-    else
-    {
-        Motor.SMO.PLL.integral_sum = Float_Limit(
-            Motor.SMO.PLL.integral_sum,
-            -Pll_integral_limit,
-            Pll_integral_limit);
-        Motor.SMO.PLL.Omega_est = Float_Limit(
-            Motor.SMO.PLL.Omega_est,
-            -Pll_omega_limit,
-            Pll_omega_limit);
+        Motor_Control_ResetObserver();
     }
     interrupt_global_enable(Irq_state);
     Foc_Protocol_SendObserverParameters();
@@ -690,10 +692,27 @@ static void Foc_Protocol_HandleControl(const uint8 *Payload)
     uint8 Enable = (uint8)(Flags & 0x01u);
     uint8 Emergency = (uint8)(Flags & 0x04u);
 
-    Protocol.Control_seen = 1u;
     Protocol.Last_control_ms = Protocol.Time_ms;
+    Protocol.Control_seen = 1u;
+    Protocol.Control_timed_out = 0u;
 
-    if ((Emergency != 0u) || (Enable == 0u))
+    if (Emergency != 0u)
+    {
+        /* 急停命令在板端锁存，复位前禁止后续使能帧重新启动电机。 */
+        Protocol.Rearm_required = 1u;
+        Foc_Protocol_StopControl();
+        return;
+    }
+
+    if (Enable == 0u)
+    {
+        /* 收到明确的失能命令后，允许后续控制帧重新使能电机。 */
+        Protocol.Rearm_required = 0u;
+        Foc_Protocol_StopControl();
+        return;
+    }
+
+    if (Protocol.Rearm_required != 0u)
     {
         Foc_Protocol_StopControl();
         return;
@@ -771,17 +790,10 @@ static void Foc_Protocol_SendTelemetry(void)
                        FOC_PROTOCOL_CONTROL_HZ * 60.0f /
                        ((float)ANGLE_PERIOD * (float)Motor.Pole_pairs);
     }
-    if (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC)
-    {
-        Mechanical_angle = 0.0f;
-        Electrical_angle = 0.0f;
-    }
-    else
-    {
-        Mechanical_angle = Motor_Control_GetMechanicalDegree();
-        Electrical_angle = (float)Motor.Encoder.Electrical_angle *
-                           360.0f / (float)ANGLE_PERIOD;
-    }
+    /* 无感模式仍回传编码器实测角度，便于与PLL估算角度直接对照。 */
+    Mechanical_angle = Motor_Control_GetMechanicalDegree();
+    Electrical_angle = (float)Motor.Encoder.Electrical_angle *
+                       360.0f / (float)ANGLE_PERIOD;
 
     Payload[0] = (Protocol.Enabled != 0u) ? 1u : 0u;
     Payload[1] = (uint8)Motor.Control_mode;
@@ -935,6 +947,466 @@ static void Foc_Protocol_SendObserverWaveform(void)
 }
 
 /***********************************************
+ * @brief : 统计紧凑观测流位图中已选择的字段数量
+ * @param : Mask 观测字段位图
+ * @return: 已选择的字段数量
+ * @date  : 2026-09-15
+ * @author: L
+ ************************************************/
+static uint8 Foc_Protocol_CountObserverStreamFields(uint16 Mask)
+{
+    uint8 Field_count = 0u;
+
+    while (Mask != 0u)
+    {
+        Field_count += (uint8)(Mask & 0x0001u);
+        Mask >>= 1u;
+    }
+
+    return Field_count;
+}
+
+/***********************************************
+ * @brief : 按订阅位图向紧凑观测负载追加一个浮点字段
+ * @param : Payload 紧凑观测负载地址
+ * @param : Offset 当前写入偏移
+ * @param : Field_mask 当前字段对应的位图掩码
+ * @param : Value 当前字段数值
+ * @return: 追加字段后的写入偏移
+ * @date  : 2026-09-15
+ * @author: L
+ ************************************************/
+static uint16 Foc_Protocol_AppendObserverStreamFloat(uint8 *Payload,
+                                                     uint16 Offset,
+                                                     uint16 Field_mask,
+                                                     float Value)
+{
+    if ((Protocol.Observer_stream_mask & Field_mask) != 0u)
+    {
+        Foc_Protocol_WriteFloat(&Payload[Offset], Value);
+        Offset += (uint16)sizeof(float);
+    }
+
+    return Offset;
+}
+
+/***********************************************
+ * @brief : 校验紧凑观测流配置并按字段数和串口带宽确定实际采样周期
+ * @param : Payload 字段位图、请求周期和可用带宽负载
+ * @param : Payload_length 配置负载长度
+ * @return: 无
+ * @date  : 2026-09-16
+ * @author: L
+ ************************************************/
+static void Foc_Protocol_HandleObserverStreamConfig(const uint8 *Payload,
+                                                     uint16 Payload_length)
+{
+    uint16 Observer_mask =
+        Foc_Protocol_ReadU16(&Payload[0]) & FOC_PROTOCOL_OBSERVER_FIELD_ALL;
+    uint16 Requested_period_tick;
+    uint16 Minimum_requested_tick;
+    uint16 Batch_header_length;
+    uint8 Field_count;
+    uint8 Batch_count;
+    uint8 Adaptive_format;
+    uint32 Bytes_per_sample;
+    uint32 Frame_length;
+    uint32 Minimum_period_tick;
+    uint32 Stream_bps;
+
+    Adaptive_format =
+        (Payload_length == FOC_PROTOCOL_OBSERVER_STREAM_ADAPTIVE_CONFIG_LENGTH) ?
+        1u : 0u;
+    if (Adaptive_format != 0u)
+    {
+        Requested_period_tick = Foc_Protocol_ReadU16(&Payload[2]);
+        Minimum_requested_tick =
+            FOC_PROTOCOL_OBSERVER_STREAM_PERIOD_MIN_TICK;
+        Stream_bps = Foc_Protocol_ReadU32(&Payload[4]);
+        Batch_header_length =
+            FOC_PROTOCOL_OBSERVER_STREAM_ADAPTIVE_HEADER_LENGTH;
+    }
+    else
+    {
+        Requested_period_tick =
+            (uint16)Payload[2] * FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS;
+        Minimum_requested_tick =
+            FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS;
+        Stream_bps =
+            (Payload_length == FOC_PROTOCOL_OBSERVER_STREAM_CONFIG_LENGTH) ?
+            Foc_Protocol_ReadU32(&Payload[3]) :
+            FOC_PROTOCOL_OBSERVER_STREAM_BPS_DEFAULT;
+        Batch_header_length =
+            FOC_PROTOCOL_OBSERVER_STREAM_BATCH_HEADER_LENGTH;
+    }
+
+    if (Requested_period_tick < Minimum_requested_tick)
+    {
+        Requested_period_tick = Minimum_requested_tick;
+    }
+    else if (Requested_period_tick >
+             FOC_PROTOCOL_OBSERVER_STREAM_PERIOD_MAX_TICK)
+    {
+        Requested_period_tick =
+            FOC_PROTOCOL_OBSERVER_STREAM_PERIOD_MAX_TICK;
+    }
+
+    if (Stream_bps < FOC_PROTOCOL_OBSERVER_STREAM_BPS_MIN)
+    {
+        Stream_bps = FOC_PROTOCOL_OBSERVER_STREAM_BPS_MIN;
+    }
+    else if (Stream_bps > FOC_PROTOCOL_OBSERVER_STREAM_BPS_MAX)
+    {
+        Stream_bps = FOC_PROTOCOL_OBSERVER_STREAM_BPS_MAX;
+    }
+
+    Field_count = Foc_Protocol_CountObserverStreamFields(Observer_mask);
+    Bytes_per_sample = (uint32)Field_count * (uint32)sizeof(float);
+    Batch_count = 1u;
+    if (Bytes_per_sample != 0u)
+    {
+        Batch_count = (uint8)((FOC_PROTOCOL_OBSERVER_STREAM_MAX_LENGTH -
+                               Batch_header_length) /
+                              Bytes_per_sample);
+        if (Batch_count == 0u)
+        {
+            Batch_count = 1u;
+        }
+        else if (Batch_count > FOC_PROTOCOL_OBSERVER_STREAM_BATCH_MAX)
+        {
+            Batch_count = FOC_PROTOCOL_OBSERVER_STREAM_BATCH_MAX;
+        }
+    }
+    Frame_length = 10u + (uint32)Batch_header_length +
+                   (Bytes_per_sample * (uint32)Batch_count);
+    Minimum_period_tick =
+        ((Frame_length * 10u * FOC_PROTOCOL_OBSERVER_STREAM_TICK_HZ) +
+         (Stream_bps * (uint32)Batch_count) - 1u) /
+        (Stream_bps * (uint32)Batch_count);
+    if (Adaptive_format == 0u)
+    {
+        Minimum_period_tick =
+            ((Minimum_period_tick +
+              FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS - 1u) /
+             FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS) *
+            FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS;
+    }
+    if ((uint32)Requested_period_tick < Minimum_period_tick)
+    {
+        Requested_period_tick = (uint16)Minimum_period_tick;
+    }
+
+    Protocol.Observer_stream_mask = 0u;
+    Protocol.Observer_sample_read = 0u;
+    Protocol.Observer_sample_write = 0u;
+    Protocol.Observer_stream_period_tick = Requested_period_tick;
+    Protocol.Last_observer_sample_tick = Protocol.Observer_stream_tick;
+    Protocol.Observer_stream_adaptive = Adaptive_format;
+    Protocol.Observer_stream_configured = 1u;
+    Protocol.Observer_stream_mask = Observer_mask;
+}
+
+/***********************************************
+ * @brief : 在20 kHz控制中断中按自适应周期采集已订阅的观测字段
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-09-16
+ * @author: L
+ ************************************************/
+void Foc_Protocol_CaptureObserverStream(void)
+{
+    Foc_ProtocolObserverSample_t *Sample;
+    uint32 Current_tick;
+    uint16 Observer_mask;
+    uint8 Write_index;
+    uint8 Next_index;
+
+    if (Protocol.Observer_stream_tick_started == 0u)
+    {
+        Protocol.Observer_stream_tick =
+            Protocol.Time_ms * FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS;
+        Protocol.Observer_stream_tick_started = 1u;
+    }
+    else
+    {
+        Protocol.Observer_stream_tick++;
+    }
+
+    Observer_mask = Protocol.Observer_stream_mask;
+    if ((Protocol.Control_seen == 0u) ||
+        (Protocol.Observer_stream_configured == 0u) ||
+        (Observer_mask == 0u))
+    {
+        return;
+    }
+
+    Current_tick = Protocol.Observer_stream_tick;
+    if ((uint32)(Current_tick - Protocol.Last_observer_sample_tick) <
+        (uint32)Protocol.Observer_stream_period_tick)
+    {
+        return;
+    }
+    Protocol.Last_observer_sample_tick = Current_tick;
+
+    Write_index = Protocol.Observer_sample_write;
+    Next_index = (uint8)((Write_index + 1u) %
+                         FOC_PROTOCOL_OBSERVER_STREAM_RING_CAPACITY);
+    if (Next_index == Protocol.Observer_sample_read)
+    {
+        /* 主循环来不及发送时丢弃最新波形点，禁止历史波形继续挤占控制通信。 */
+        return;
+    }
+
+    Sample = &Protocol.Observer_samples[Write_index];
+    Sample->Timestamp_tick = Current_tick;
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_I_ALPHA_ACTUAL) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_I_ALPHA_ACTUAL] =
+            Current.clark.Alpha;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_I_BETA_ACTUAL) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_I_BETA_ACTUAL] =
+            Current.clark.Beta;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_I_ALPHA_EST) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_I_ALPHA_EST] =
+            Motor.SMO.I_alpha_est;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_I_BETA_EST) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_I_BETA_EST] =
+            Motor.SMO.I_beta_est;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_IQ_ERROR) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_IQ_ERROR] =
+            Foc_Protocol_CalculateObserverIqError();
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_E_ALPHA) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_E_ALPHA] =
+            Motor.SMO.E_alpha;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_E_BETA) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_E_BETA] =
+            Motor.SMO.E_beta;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_E_ALPHA_FILTER) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_E_ALPHA_FILTER] =
+            Motor.SMO.E_alpha_filter;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_E_BETA_FILTER) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_E_BETA_FILTER] =
+            Motor.SMO.E_beta_filter;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_ELECTRICAL_ANGLE) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_ELECTRICAL_ANGLE] =
+            (float)Motor.Encoder.Electrical_angle *
+            360.0f / (float)ANGLE_PERIOD;
+    }
+    if ((Observer_mask &
+         FOC_PROTOCOL_OBSERVER_FIELD_PLL_ELECTRICAL_ANGLE) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_PLL_ELECTRICAL_ANGLE] =
+            (float)Motor.SMO.PLL.Electrical_angle_est *
+            360.0f / (float)ANGLE_PERIOD;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_PLL_OMEGA) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_PLL_OMEGA] =
+            Motor.SMO.PLL.Omega_est;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_PLL_PHASE_ERROR) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_PLL_PHASE_ERROR] =
+            Motor.SMO.PLL.Phase_error * 360.0f / TWO_PI;
+    }
+    if ((Observer_mask &
+         FOC_PROTOCOL_OBSERVER_FIELD_PLL_MECHANICAL_ANGLE) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_PLL_MECHANICAL_ANGLE] =
+            (float)Motor.SMO.PLL.Mechanical_angle_est *
+            360.0f / (float)ANGLE_PERIOD;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_SPEED_ACTUAL) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_SPEED_ACTUAL] =
+            Motor.Encoder.Spd_rpm;
+    }
+    if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_MECHANICAL_ANGLE) != 0u)
+    {
+        Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_MECHANICAL_ANGLE] =
+            Motor_Control_GetMechanicalDegree();
+    }
+    Protocol.Observer_sample_write = Next_index;
+}
+
+/***********************************************
+ * @brief : 将环形缓冲中的连续观测点合并成一个浮点批次帧发送
+ * @param : 无
+ * @return: 已发送返回1，否则返回0
+ * @date  : 2026-09-16
+ * @author: L
+ ************************************************/
+static uint8 Foc_Protocol_SendObserverStreamBatch(void)
+{
+    uint8 Frame[FOC_PROTOCOL_OBSERVER_STREAM_MAX_LENGTH + 10u];
+    uint8 *Payload = &Frame[8];
+    uint16 Payload_length;
+    uint16 Observer_mask = Protocol.Observer_stream_mask;
+    uint16 Field_mask;
+    uint16 Crc;
+    uint16 Batch_header_length;
+    uint32 Base_timestamp_tick;
+    uint32 Current_timestamp_tick;
+    uint32 Expected_timestamp_tick;
+    uint32 Bytes_per_sample;
+    uint8 Field_count;
+    uint8 Batch_limit;
+    uint8 Available_count;
+    uint8 Batch_count;
+    uint8 Read_index;
+    uint8 Write_index;
+    uint8 Sample_index;
+    uint8 Value_index;
+    uint8 Gap_found = 0u;
+    uint8 Adaptive_format = Protocol.Observer_stream_adaptive;
+    Foc_ProtocolObserverSample_t *Sample;
+
+    if (Observer_mask == 0u)
+    {
+        return 0u;
+    }
+
+    Read_index = Protocol.Observer_sample_read;
+    Write_index = Protocol.Observer_sample_write;
+    if (Read_index == Write_index)
+    {
+        return 0u;
+    }
+
+    if (Write_index >= Read_index)
+    {
+        Available_count = (uint8)(Write_index - Read_index);
+    }
+    else
+    {
+        Available_count = (uint8)(FOC_PROTOCOL_OBSERVER_STREAM_RING_CAPACITY -
+                                  Read_index + Write_index);
+    }
+
+    Field_count = Foc_Protocol_CountObserverStreamFields(Observer_mask);
+    Bytes_per_sample = (uint32)Field_count * (uint32)sizeof(float);
+    if (Bytes_per_sample == 0u)
+    {
+        return 0u;
+    }
+    Batch_header_length = (Adaptive_format != 0u) ?
+        FOC_PROTOCOL_OBSERVER_STREAM_ADAPTIVE_HEADER_LENGTH :
+        FOC_PROTOCOL_OBSERVER_STREAM_BATCH_HEADER_LENGTH;
+    Payload_length = Batch_header_length;
+    Batch_limit = (uint8)((FOC_PROTOCOL_OBSERVER_STREAM_MAX_LENGTH -
+                           Batch_header_length) /
+                          Bytes_per_sample);
+    if (Batch_limit > FOC_PROTOCOL_OBSERVER_STREAM_BATCH_MAX)
+    {
+        Batch_limit = FOC_PROTOCOL_OBSERVER_STREAM_BATCH_MAX;
+    }
+    if (Batch_limit == 0u)
+    {
+        Batch_limit = 1u;
+    }
+
+    Batch_count = (Available_count < Batch_limit) ?
+                  Available_count : Batch_limit;
+    Base_timestamp_tick =
+        Protocol.Observer_samples[Read_index].Timestamp_tick;
+    for (Sample_index = 1u; Sample_index < Batch_count; Sample_index++)
+    {
+        Sample = &Protocol.Observer_samples[
+            (uint8)((Read_index + Sample_index) %
+                    FOC_PROTOCOL_OBSERVER_STREAM_RING_CAPACITY)];
+        Expected_timestamp_tick = Base_timestamp_tick +
+                                  ((uint32)Sample_index *
+                                   (uint32)Protocol.Observer_stream_period_tick);
+        if (Sample->Timestamp_tick != Expected_timestamp_tick)
+        {
+            Batch_count = Sample_index;
+            Gap_found = 1u;
+            break;
+        }
+    }
+
+    Current_timestamp_tick = Protocol.Observer_stream_tick;
+    if ((Gap_found == 0u) &&
+        (Batch_count < Batch_limit) &&
+        ((uint32)(Current_timestamp_tick - Base_timestamp_tick) <
+         FOC_PROTOCOL_OBSERVER_STREAM_FLUSH_TICK))
+    {
+        return 0u;
+    }
+
+    memset(Frame, 0, sizeof(Frame));
+    Foc_Protocol_WriteU16(&Payload[4], Observer_mask);
+    if (Adaptive_format != 0u)
+    {
+        Foc_Protocol_WriteU32(&Payload[0], Base_timestamp_tick);
+        Foc_Protocol_WriteU16(
+            &Payload[6],
+            Protocol.Observer_stream_period_tick);
+        Payload[8] = Batch_count;
+    }
+    else
+    {
+        Foc_Protocol_WriteU32(
+            &Payload[0],
+            Base_timestamp_tick /
+            FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS);
+        Payload[6] = (uint8)(Protocol.Observer_stream_period_tick /
+                             FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS);
+        Payload[7] = Batch_count;
+    }
+
+    for (Sample_index = 0u; Sample_index < Batch_count; Sample_index++)
+    {
+        Sample = &Protocol.Observer_samples[Read_index];
+        for (Value_index = 0u;
+             Value_index < (uint8)FOC_PROTOCOL_OBSERVER_VALUE_COUNT;
+             Value_index++)
+        {
+            Field_mask = (uint16)(1u << Value_index);
+            Payload_length = Foc_Protocol_AppendObserverStreamFloat(
+                Payload,
+                Payload_length,
+                Field_mask,
+                Sample->Values[Value_index]);
+        }
+        Read_index = (uint8)((Read_index + 1u) %
+                             FOC_PROTOCOL_OBSERVER_STREAM_RING_CAPACITY);
+    }
+    Protocol.Observer_sample_read = Read_index;
+
+    Frame[0] = 0xaau;
+    Frame[1] = 0x55u;
+    Frame[2] = FOC_PROTOCOL_VERSION;
+    Frame[3] = (Adaptive_format != 0u) ?
+        FOC_PROTOCOL_FRAME_TYPE_OBSERVER_STREAM_ADAPTIVE_BATCH :
+        FOC_PROTOCOL_FRAME_TYPE_OBSERVER_STREAM_BATCH;
+    Foc_Protocol_WriteU16(&Frame[4], Protocol.Tx_sequence++);
+    Foc_Protocol_WriteU16(&Frame[6], Payload_length);
+    Crc = Foc_Protocol_Crc16(&Frame[2], (uint16)(6u + Payload_length));
+    Foc_Protocol_WriteU16(&Frame[8u + Payload_length], Crc);
+    (void)debug_send_buffer(Frame, (uint32)(Payload_length + 10u));
+    return 1u;
+}
+
+/***********************************************
  * @brief : 逐首发送下位机内置乐曲编号和UTF-8名称
  * @param : 无
  * @return: 无
@@ -1045,6 +1517,15 @@ static void Foc_Protocol_HandleFrame(const uint8 *Frame, uint16 Length)
     {
         Foc_Protocol_HandleObserverParameterWrite(&Frame[8]);
     }
+    else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_OBSERVER_STREAM_CONFIG) &&
+             ((Payload_length ==
+               FOC_PROTOCOL_OBSERVER_STREAM_CONFIG_LEGACY_LENGTH) ||
+              (Payload_length == FOC_PROTOCOL_OBSERVER_STREAM_CONFIG_LENGTH) ||
+              (Payload_length ==
+               FOC_PROTOCOL_OBSERVER_STREAM_ADAPTIVE_CONFIG_LENGTH)))
+    {
+        Foc_Protocol_HandleObserverStreamConfig(&Frame[8], Payload_length);
+    }
     else if ((Frame[3] == FOC_PROTOCOL_FRAME_TYPE_SONG_LIST) &&
              (Payload_length == 0u))
     {
@@ -1133,6 +1614,8 @@ void Foc_Protocol_Init(void)
 {
     debug_init();
     memset(&Protocol, 0, sizeof(Protocol));
+    /* 上电或复位后先等待失能帧，禁止残留的旧使能心跳直接启动电机。 */
+    Protocol.Rearm_required = 1u;
 }
 
 /***********************************************
@@ -1149,6 +1632,12 @@ void Foc_Protocol_Service(void)
     uint32 Index;
     uint32 Current_ms;
 
+    if (Protocol.Timeout_cleanup_pending != 0u)
+    {
+        Protocol.Timeout_cleanup_pending = 0u;
+        Foc_Protocol_StopControl();
+    }
+
     do
     {
         Receive_length = debug_read_ring_buffer(
@@ -1164,14 +1653,6 @@ void Foc_Protocol_Service(void)
     Current_ms = Protocol.Time_ms;
 
     if ((Protocol.Control_seen != 0u) &&
-        ((uint32)(Current_ms - Protocol.Last_control_ms) >
-         FOC_PROTOCOL_TIMEOUT_MS))
-    {
-        Foc_Protocol_StopControl();
-        Protocol.Control_seen = 0u;
-    }
-
-    if ((Protocol.Control_seen != 0u) &&
         ((uint32)(Current_ms - Protocol.Last_telemetry_ms) >=
          FOC_PROTOCOL_TELEMETRY_PERIOD_MS))
     {
@@ -1182,6 +1663,18 @@ void Foc_Protocol_Service(void)
     }
 
     if ((Protocol.Control_seen != 0u) &&
+        (Protocol.Observer_stream_configured != 0u) &&
+        (Protocol.Observer_stream_mask != 0u))
+    {
+        if (Foc_Protocol_SendObserverStreamBatch() != 0u)
+        {
+            return;
+        }
+    }
+
+    if ((Protocol.Control_seen != 0u) &&
+        ((Motor.Control_mode == MOTOR_CONTROL_OPEN_LOOP) ||
+         (Motor.Control_mode == MOTOR_CONTROL_VOICE)) &&
         ((uint32)(Current_ms - Protocol.Last_waveform_ms) >=
          FOC_PROTOCOL_WAVEFORM_PERIOD_MS))
     {
@@ -1191,6 +1684,9 @@ void Foc_Protocol_Service(void)
     }
 
     if ((Protocol.Control_seen != 0u) &&
+        ((Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC) ||
+         (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC)) &&
+        (Protocol.Observer_stream_configured == 0u) &&
         ((uint32)(Current_ms - Protocol.Last_observer_waveform_ms) >=
          FOC_PROTOCOL_OBSERVER_WAVEFORM_PERIOD_MS))
     {
@@ -1200,13 +1696,21 @@ void Foc_Protocol_Service(void)
 }
 
 /***********************************************
- * @brief : 更新FOC-UART协议毫秒时间基准，需按1 kHz调用
+ * @brief : 更新协议时间并在控制帧超时后强制撤销电机输出
  * @param : 无
  * @return: 无
- * @date  : 2026-08-28
+ * @date  : 2026-09-16
  * @author: L
  ************************************************/
 void Foc_Protocol_Tick1ms(void)
 {
     Protocol.Time_ms++;
+    if ((Protocol.Control_seen != 0u) &&
+        (Protocol.Control_timed_out == 0u) &&
+        ((uint32)(Protocol.Time_ms - Protocol.Last_control_ms) >=
+         FOC_PROTOCOL_CONTROL_TIMEOUT_MS))
+    {
+        Protocol.Control_timed_out = 1u;
+        Foc_Protocol_ForceTimeoutSafeOutput();
+    }
 }
