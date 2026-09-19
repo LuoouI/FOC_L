@@ -1,5 +1,5 @@
 #include "My_LED.h"
-#include "My_ADC/My_ADC.h"
+#include "SVPWM/SVPWM.h"
 
 static LED_State_t MyLED_LedState = LED_OFF;
 static uint32 MyLED_BlinkElapsedMs = 0u;
@@ -95,7 +95,7 @@ LED_State_t My_LED_GetLedState(void)
 }
 
 /***********************************************
- * @brief : 根据母线电压更新保护指示灯状态
+ * @brief : 根据控制环缓存的母线电压更新保护指示灯状态
  * @param : /
  * @return: void
  * @date  : 2026-08-15
@@ -103,7 +103,7 @@ LED_State_t My_LED_GetLedState(void)
  ************************************************/
 void My_LED_CheckVoltage(void)
 {
-    float Voltage = My_ADC_GetBatteryVoltage();
+    float Voltage = SVPWM.VBUS;
     LED_State_t LedState;
 
     if (Voltage < VOLTAGE_LED_OFF_VALUE)

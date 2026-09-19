@@ -1,5 +1,6 @@
 #include "Foc_voice.h"
 #include "Fast_sin/Fast_sin.h"
+#include "Foc_config.h"
 #include "Function/Function.h"
 #include "Motor_Control/Motor_Control.h"
 #include "My_TCPWM/My_TCPWM.h"
@@ -290,7 +291,7 @@ static uint8 Foc_voice_LoadNote(void)
 
     Voice.Song_duration8th += Note->Duration_8th;
     Duration_count =
-        (uint32)Voice.Song_duration8th * FOC_VOICE_CONTROL_HZ * 30u /
+        (uint32)Voice.Song_duration8th * MOTOR_VOICE_LOOP_HZ * 30u /
         Song->Bpm - Voice.Song_elapsed;
 
     Voice.Note_elapsed = 0u;
@@ -298,8 +299,8 @@ static uint8 Foc_voice_LoadNote(void)
     Voice.Tone_phase = 0u;
     Voice.Tone_step = (uint16)(
         ((uint32)Note->Pitch * ANGLE_PERIOD +
-         (FOC_VOICE_CONTROL_HZ / 2u)) /
-        FOC_VOICE_CONTROL_HZ);
+         (MOTOR_VOICE_LOOP_HZ / 2u)) /
+        MOTOR_VOICE_LOOP_HZ);
 
     if (Note->Pitch == FOC_VOICE_PITCH_REST)
     {
@@ -451,12 +452,12 @@ void Foc_voice_PlayTone(
     float Envelope;
 
     Tone_count =
-        (uint32)Tone_ms * FOC_VOICE_CONTROL_HZ / 1000u;
+        (uint32)Tone_ms * MOTOR_VOICE_LOOP_HZ / 1000u;
     Gate_count = Tone_count * FOC_VOICE_GATE_PERCENT / 100u;
     Tone_step = (uint16)(
         ((uint32)Pitch * ANGLE_PERIOD +
-         (FOC_VOICE_CONTROL_HZ / 2u)) /
-        FOC_VOICE_CONTROL_HZ);
+         (MOTOR_VOICE_LOOP_HZ / 2u)) /
+        MOTOR_VOICE_LOOP_HZ);
 
     Irq_state = interrupt_global_disable();
 
@@ -466,7 +467,7 @@ void Foc_voice_PlayTone(
         Foc_voice_Output(Envelope, Tone_phase, Phase);
         Tone_phase = Angle_Wrap(
             (int32)Tone_phase + (int32)Tone_step);
-        system_delay_us(1000000u / FOC_VOICE_CONTROL_HZ);
+        system_delay_us(1000000u / MOTOR_VOICE_LOOP_HZ);
     }
 
     Foc_voice_OutputNeutral();

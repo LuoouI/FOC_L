@@ -1,5 +1,6 @@
 #include "Motor_Control.h"
 #include "Foc_voice/Foc_voice.h"
+#include "Get_time/Get_time.h"
 #include "SVPWM/SVPWM.h"
 #include "float.h"
 
@@ -94,6 +95,9 @@ Foc_motor_t Motor =
     .Zero_ready = 0u
 };
 
+static Time_Divider_t Speed_timer;       /* 母线电压、转速计算及速度环分频计时器 */
+static Time_Divider_t Position_timer;    /* 位置环分频计时器 */
+
 /***********************************************
  * @brief : 使用Motor中的参数初始化FOC环路及无感观测器
  * @param : 无
@@ -104,6 +108,9 @@ Foc_motor_t Motor =
 void Motor_Control_Init(void)
 {
     float Voltage_limit;
+
+    Get_Time_Init(&Speed_timer, MOTOR_SPEED_LOOP_DIVIDER);
+    Get_Time_Init(&Position_timer, MOTOR_POSITION_LOOP_DIVIDER);
 
     (void)menc15a_init();
 
@@ -155,7 +162,7 @@ void Motor_Control_ResetObserver(void)
 }
 
 /***********************************************
- * @brief : 按20 kHz时基执行总控，并分频运行1 kHz速度环和500 Hz位置环
+ * @brief : 按20 kHz时基执行总控，并分频运行1 kHz母线电压、转速、速度环和500 Hz位置环
  * @param : 无
  * @return: 无
  * @date  : 2026-08-27
@@ -163,24 +170,23 @@ void Motor_Control_ResetObserver(void)
  ************************************************/
 void Motor_Control_Loop(void)
 {
-    static uint16 Speed_count = 0u;
-    static uint16 Position_count = 0u;
     static Motor_control_mode_t Last_control_mode = MOTOR_CONTROL_OPEN_LOOP;
     static Motor_foc_mode_t Last_foc_mode = MOTOR_FOC_CURRENT;
+    uint8 Speed_tick = 0u;
+    uint8 Speed_loop_reset = 0u;
 
     if ((Motor.Control_mode != Last_control_mode) ||
         ((Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC) &&
          (Motor.Foc_mode != Last_foc_mode)))
     {
-        Speed_count = 0u;
-        Position_count = 0u;
+        Get_Time_Reset(&Speed_timer);
+        Get_Time_Reset(&Position_timer);
         Motor.Position_loop.Track_ready = 0u;
         Motor.Position_loop.In_deadband = 0u;
         if ((Motor.Control_mode == MOTOR_CONTROL_ENCODER_FOC) &&
             (Motor.Foc_mode == MOTOR_FOC_SPEED))
         {
-            Motor.Speed_loop.Target_rpm = Motor.Encoder.Spd_rpm;
-            PID_Clear(&Motor.Speed_loop.Pid);
+            Speed_loop_reset = 1u;
         }
 
         if ((Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC) &&
@@ -194,6 +200,19 @@ void Motor_Control_Loop(void)
             Motor_Control_ResetObserver();
             Open_Loop_Update(0.0f, 0.0f, 0);
         }
+    }
+
+    if (Get_Time(&Speed_timer) != 0u)
+    {
+        VBUS_Get();
+        RPM_Cal();
+        Speed_tick = 1u;
+    }
+
+    if (Speed_loop_reset != 0u)
+    {
+        Motor.Speed_loop.Target_rpm = Motor.Encoder.Spd_rpm;
+        PID_Clear(&Motor.Speed_loop.Pid);
     }
 
     switch (Motor.Control_mode)
@@ -215,44 +234,29 @@ void Motor_Control_Loop(void)
             if (Motor.Zero_ready == 0u)
             {
                 Foc_Loop_StopOutput();
-                Speed_count = 0u;
-                Position_count = 0u;
+                Get_Time_Reset(&Position_timer);
                 break;
             }
 
             if (Motor.Foc_mode == MOTOR_FOC_POSITION)
             {
-                if (Position_count == 0u)
+                if (Get_Time(&Position_timer) != 0u)
                 {
                     Foc_PositionLoop_Update();
-                    Position_count = MOTOR_POSITION_LOOP_DIVIDER - 1u;
-                }
-                else
-                {
-                    Position_count--;
                 }
             }
             else
             {
-                Position_count = 0u;
+                Get_Time_Reset(&Position_timer);
             }
 
             if ((Motor.Foc_mode == MOTOR_FOC_SPEED) ||
                 (Motor.Foc_mode == MOTOR_FOC_POSITION))
             {
-                if (Speed_count == 0u)
+                if (Speed_tick != 0u)
                 {
                     Foc_SpeedLoop_Update();
-                    Speed_count = MOTOR_SPEED_LOOP_DIVIDER - 1u;
                 }
-                else
-                {
-                    Speed_count--;
-                }
-            }
-            else
-            {
-                Speed_count = 0u;
             }
 
             SMO_Update();

@@ -264,8 +264,8 @@ static void Foc_Protocol_HandleParameterWrite(const uint8 *Payload)
     float Position_deadband = Foc_Protocol_ReadFloat(&Payload[40]);
     uint32 Irq_state;                         /* 参数组更新期间的中断状态 */
 
-    if ((Current_bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
-        (Current_bandwidth > FOC_PROTOCOL_CURRENT_BW_MAX_HZ) ||
+    if ((Current_bandwidth < PID_BANDWIDTH_MIN_HZ) ||
+        (Current_bandwidth > PID_BANDWIDTH_MAX_HZ) ||
         (Ramp_rate != Ramp_rate) ||
         (Ramp_rate < 0.0f) ||
         (Ramp_rate > FOC_PROTOCOL_SPEED_RAMP_MAX) ||
@@ -428,10 +428,10 @@ static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload)
         (Smo_gain > FOC_PROTOCOL_SMO_GAIN_MAX) ||
         (Smo_boundary_current < 0.0f) ||
         (Smo_boundary_current > FOC_PROTOCOL_SMO_BOUNDARY_CURRENT_MAX) ||
-        (Smo_filter_bandwidth < FOC_PROTOCOL_SMO_FILTER_BW_MIN) ||
-        (Smo_filter_bandwidth > FOC_PROTOCOL_SMO_FILTER_BW_MAX) ||
-        (Pll_bandwidth < FOC_PROTOCOL_PLL_BW_MIN) ||
-        (Pll_bandwidth > FOC_PROTOCOL_PLL_BW_MAX))
+        (Smo_filter_bandwidth < MOTOR_SMO_FILTER_BW_MIN_HZ) ||
+        (Smo_filter_bandwidth > MOTOR_SMO_FILTER_BW_MAX_HZ) ||
+        (Pll_bandwidth < MOTOR_PLL_BW_MIN_HZ) ||
+        (Pll_bandwidth > MOTOR_PLL_BW_MAX_HZ))
     {
         return;
     }
@@ -501,8 +501,8 @@ static void Foc_Protocol_HandleFocCommon(const uint8 *Payload,
         ((Control_mode == MOTOR_CONTROL_ENCODER_FOC) &&
          (Motor.Zero_ready == 0u)) ||
         ((Foc_mode == (uint8)MOTOR_FOC_CURRENT) &&
-         ((Bandwidth < FOC_PROTOCOL_CURRENT_BW_MIN_HZ) ||
-          (Bandwidth > FOC_PROTOCOL_CURRENT_BW_MAX_HZ))) ||
+         ((Bandwidth < PID_BANDWIDTH_MIN_HZ) ||
+          (Bandwidth > PID_BANDWIDTH_MAX_HZ))) ||
         (Protocol.Parameters_seen == 0u))
     {
         Foc_Protocol_StopControl();
@@ -787,7 +787,7 @@ static void Foc_Protocol_SendTelemetry(void)
     else
     {
         Speed_target = (float)Motor.Open_loop.Step *
-                       FOC_PROTOCOL_CONTROL_HZ * 60.0f /
+                       (float)MOTOR_CURRENT_LOOP_HZ * 60.0f /
                        ((float)ANGLE_PERIOD * (float)Motor.Pole_pairs);
     }
     /* 无感模式仍回传编码器实测角度，便于与PLL估算角度直接对照。 */
@@ -1021,7 +1021,7 @@ static void Foc_Protocol_HandleObserverStreamConfig(const uint8 *Payload,
     {
         Requested_period_tick = Foc_Protocol_ReadU16(&Payload[2]);
         Minimum_requested_tick =
-            FOC_PROTOCOL_OBSERVER_STREAM_PERIOD_MIN_TICK;
+            MOTOR_OBSERVER_PERIOD_MIN_TICK;
         Stream_bps = Foc_Protocol_ReadU32(&Payload[4]);
         Batch_header_length =
             FOC_PROTOCOL_OBSERVER_STREAM_ADAPTIVE_HEADER_LENGTH;
@@ -1029,9 +1029,9 @@ static void Foc_Protocol_HandleObserverStreamConfig(const uint8 *Payload,
     else
     {
         Requested_period_tick =
-            (uint16)Payload[2] * FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS;
+            (uint16)Payload[2] * MOTOR_OBSERVER_TICKS_PER_MS;
         Minimum_requested_tick =
-            FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS;
+            MOTOR_OBSERVER_TICKS_PER_MS;
         Stream_bps =
             (Payload_length == FOC_PROTOCOL_OBSERVER_STREAM_CONFIG_LENGTH) ?
             Foc_Protocol_ReadU32(&Payload[3]) :
@@ -1045,10 +1045,10 @@ static void Foc_Protocol_HandleObserverStreamConfig(const uint8 *Payload,
         Requested_period_tick = Minimum_requested_tick;
     }
     else if (Requested_period_tick >
-             FOC_PROTOCOL_OBSERVER_STREAM_PERIOD_MAX_TICK)
+             MOTOR_OBSERVER_PERIOD_MAX_TICK)
     {
         Requested_period_tick =
-            FOC_PROTOCOL_OBSERVER_STREAM_PERIOD_MAX_TICK;
+            MOTOR_OBSERVER_PERIOD_MAX_TICK;
     }
 
     if (Stream_bps < FOC_PROTOCOL_OBSERVER_STREAM_BPS_MIN)
@@ -1080,16 +1080,16 @@ static void Foc_Protocol_HandleObserverStreamConfig(const uint8 *Payload,
     Frame_length = 10u + (uint32)Batch_header_length +
                    (Bytes_per_sample * (uint32)Batch_count);
     Minimum_period_tick =
-        ((Frame_length * 10u * FOC_PROTOCOL_OBSERVER_STREAM_TICK_HZ) +
+        ((Frame_length * 10u * MOTOR_OBSERVER_TIMEBASE_HZ) +
          (Stream_bps * (uint32)Batch_count) - 1u) /
         (Stream_bps * (uint32)Batch_count);
     if (Adaptive_format == 0u)
     {
         Minimum_period_tick =
             ((Minimum_period_tick +
-              FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS - 1u) /
-             FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS) *
-            FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS;
+              MOTOR_OBSERVER_TICKS_PER_MS - 1u) /
+             MOTOR_OBSERVER_TICKS_PER_MS) *
+            MOTOR_OBSERVER_TICKS_PER_MS;
     }
     if ((uint32)Requested_period_tick < Minimum_period_tick)
     {
@@ -1124,7 +1124,7 @@ void Foc_Protocol_CaptureObserverStream(void)
     if (Protocol.Observer_stream_tick_started == 0u)
     {
         Protocol.Observer_stream_tick =
-            Protocol.Time_ms * FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS;
+            Protocol.Time_ms * MOTOR_OBSERVER_TICKS_PER_MS;
         Protocol.Observer_stream_tick_started = 1u;
     }
     else
@@ -1367,9 +1367,9 @@ static uint8 Foc_Protocol_SendObserverStreamBatch(void)
         Foc_Protocol_WriteU32(
             &Payload[0],
             Base_timestamp_tick /
-            FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS);
+            MOTOR_OBSERVER_TICKS_PER_MS);
         Payload[6] = (uint8)(Protocol.Observer_stream_period_tick /
-                             FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS);
+                             MOTOR_OBSERVER_TICKS_PER_MS);
         Payload[7] = Batch_count;
     }
 

@@ -51,13 +51,12 @@ void pit0_ch1_isr()                     // 定时器通道 1 周期中断服务�
 void pit0_ch2_isr()                     // 定时器通道 2 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH2);
-    
-    VBUS_Get();    // 获取母线电压
-    RPM_Cal();      // 转速计算
 
-    Motor_Torque_Estimate(Current.park.Iq); // 估算电机转矩
+    /* 估算电机转矩 */
+    Motor_Torque_Estimate();
 
-    Foc_Protocol_Tick1ms(); // 更新上位机协议时间基准
+    /* 更新上位机协议时间基准 */
+    Foc_Protocol_Tick1ms();
 
 }
 
@@ -65,17 +64,17 @@ void pit0_ch10_isr()                    // 定时器通道 10 周期中断服务
 {
     pit_isr_flag_clear(PIT_CH10);
     
-   //勿动（计数器和adc冲突）
+   /* 勿动（计数器和adc冲突）*/
 }
 
 void pit0_ch11_isr()                    // 定时器通道 11 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH11);
     
-    // // 按键扫描  若要使用按键需要按键初始化
+    /* 按键扫描  若要使用按键需要按键初始化 */
     // key_scanner();   
 
-    // LED服务函数
+    /* LED服务函数 */
     My_LED_CheckVoltage();
     My_LED_Service(10u);
 

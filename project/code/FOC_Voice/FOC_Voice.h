@@ -3,7 +3,6 @@
 
 #include "zf_common_headfile.h"
 
-#define FOC_VOICE_CONTROL_HZ          (20000u)      /* 声音控制调用频率，必须与电机控制频率一致 */
 #define FOC_VOICE_MIRACLE_BPM         (128u)        /* 《奇迹再现》播放速度 */
 #define FOC_VOICE_TWINKLE_BPM         (120u)        /* 《小星星》播放速度 */
 #define FOC_VOICE_ODE_BPM             (120u)        /* 《欢乐颂》播放速度 */

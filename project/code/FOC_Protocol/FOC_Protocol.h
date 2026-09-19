@@ -2,6 +2,7 @@
 #define FOC_PROTOCOL_H
 
 #include "zf_common_headfile.h"
+#include "Foc_config.h"
 
 #define FOC_PROTOCOL_VERSION              (1u)                          /* FOC-UART协议版本 */
 #define FOC_PROTOCOL_FRAME_TYPE_CONTROL   (0x10u)                       /* 电机控制命令帧 */
@@ -33,11 +34,8 @@
 #define FOC_PROTOCOL_OBSERVER_STREAM_RING_CAPACITY (32u)                /* 中断采样环形缓冲容量 */
 #define FOC_PROTOCOL_OBSERVER_STREAM_BATCH_HEADER_LENGTH (8u)           /* 毫秒观测批次固定负载长度 */
 #define FOC_PROTOCOL_OBSERVER_STREAM_ADAPTIVE_HEADER_LENGTH (9u)        /* 高分辨率观测批次固定负载长度 */
-#define FOC_PROTOCOL_OBSERVER_STREAM_TICK_HZ (20000u)                   /* 高分辨率观测采样时基频率 */
-#define FOC_PROTOCOL_OBSERVER_STREAM_TICKS_PER_MS (20u)                 /* 每毫秒包含的观测采样节拍数 */
-#define FOC_PROTOCOL_OBSERVER_STREAM_PERIOD_MIN_TICK (5u)               /* 最短采样周期，限制最高采样率为4 kHz */
-#define FOC_PROTOCOL_OBSERVER_STREAM_PERIOD_MAX_TICK (400u)             /* 最长采样周期，对应20 ms */
-#define FOC_PROTOCOL_OBSERVER_STREAM_FLUSH_TICK (160u)                  /* 未满批次的最长等待时间，对应8 ms */
+#define FOC_PROTOCOL_OBSERVER_STREAM_FLUSH_TICK \
+    (8u * MOTOR_OBSERVER_TICKS_PER_MS)                                  /* 未满批次的最长等待时间，对应8 ms */
 #define FOC_PROTOCOL_FRAME_MAX            (64u)                         /* 接收帧最大字节数 */
 #define FOC_PROTOCOL_SONG_NAME_MAX        (48u)                         /* 单个UTF-8乐曲名称最大字节数 */
 #define FOC_PROTOCOL_TELEMETRY_PERIOD_MS  (25u)                         /* 基础遥测发送周期 */
@@ -47,14 +45,11 @@
 #define FOC_PROTOCOL_OBSERVER_STREAM_BPS_MAX (1200000u)                 /* 紧凑观测流最高可用串口带宽 */
 #define FOC_PROTOCOL_OBSERVER_STREAM_BPS_DEFAULT (200000u)              /* 旧版配置使用的默认串口带宽 */
 #define FOC_PROTOCOL_CONTROL_TIMEOUT_MS   (200u)                         /* 合法控制帧接收超时时间 */
-#define FOC_PROTOCOL_CONTROL_HZ           (20000.0f)                    /* 电机控制频率 */
 #define FOC_PROTOCOL_UQ_LIMIT             (60.0f)                       /* 开环交轴电压限幅 */
 #define FOC_PROTOCOL_DRIVE_MODE_OPEN_LOOP (0u)                          /* 开环电压矢量控制模式 */
 #define FOC_PROTOCOL_DRIVE_MODE_ENCODER_FOC (1u)                        /* 有感FOC控制模式 */
 #define FOC_PROTOCOL_DRIVE_MODE_VOICE     (2u)                          /* 电机音乐播放模式 */
 #define FOC_PROTOCOL_DRIVE_MODE_SENSORLESS_FOC (3u)                    /* 无感FOC观测调试模式 */
-#define FOC_PROTOCOL_CURRENT_BW_MIN_HZ    (1u)                          /* 电流环带宽下限，单位为Hz */
-#define FOC_PROTOCOL_CURRENT_BW_MAX_HZ    (5000u)                       /* 电流环带宽上限，单位为Hz */
 #define FOC_PROTOCOL_LOOP_GAIN_MAX        (100.0f)                      /* 速度、位置环增益上限 */
 #define FOC_PROTOCOL_SPEED_INTEGRAL_LIMIT_MAX (5.0f)                    /* 速度环积分项限幅上限，单位为A */
 #define FOC_PROTOCOL_SPEED_RAMP_MIN       (1.0f)                        /* 速度斜坡速率下限，单位为rpm/s */
@@ -65,10 +60,6 @@
 #define FOC_PROTOCOL_POSITION_SPEED_DEADBAND_MAX (100.0f)               /* 到位速度死区上限，单位为rpm */
 #define FOC_PROTOCOL_SMO_GAIN_MAX         (100.0f)                       /* SMO滑模增益上限 */
 #define FOC_PROTOCOL_SMO_BOUNDARY_CURRENT_MAX (100.0f)                   /* SMO边界电流上限，单位为A */
-#define FOC_PROTOCOL_SMO_FILTER_BW_MIN    (1.0f)                         /* SMO滤波带宽下限，单位为Hz */
-#define FOC_PROTOCOL_SMO_FILTER_BW_MAX    (500.0f)                       /* SMO滤波带宽上限，单位为Hz */
-#define FOC_PROTOCOL_PLL_BW_MIN          (1.0f)                          /* PLL带宽下限，单位为Hz */
-#define FOC_PROTOCOL_PLL_BW_MAX          (500.0f)                        /* PLL带宽上限，单位为Hz */
 #define FOC_PROTOCOL_STATUS_MUSIC_PLAYING (0x04u)                       /* 状态标志中的音乐播放位 */
 
 #define FOC_PROTOCOL_OBSERVER_FIELD_I_ALPHA_ACTUAL       (0x0001u)      /* 实际Alpha轴电流 */

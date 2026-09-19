@@ -1,5 +1,6 @@
 #include "Motor_Torque.h"
 #include "Function/Function.h"
+#include "Current_sample/Current_sample.h"
 
 volatile Torque_t Torque =
 {
@@ -17,10 +18,10 @@ volatile Torque_t Torque =
  * @date  : 2026-08-30
  * @author: L
  ************************************************/
-void Motor_Torque_Estimate(float Iq)
+void Motor_Torque_Estimate(void)
 {
     Torque.Kt = 60.0f / (TWO_PI * Torque.Kv);
-    Torque.Motor_torque = Torque.Kt * Iq * Torque.Gear_ratio;
+    Torque.Motor_torque = Torque.Kt * Current.park.Iq * Torque.Gear_ratio;
     
     Torque.Ready = 1u;
 
