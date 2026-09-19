@@ -2,18 +2,8 @@
 #define PID_H_
 
 #include "zf_common_headfile.h"
+#include "Foc_config.h"
 #include "Function/Function.h"
-
-#define LD   (0.031036f)            /* d轴电感，单位为mH */
-#define LQ   (0.035016f)            /* q轴电感，单位为mH */
-#define LS   (0.033026f)            /* 定子电感，单位为mH */
-#define RS   (0.28659f)             /* 定子电阻，单位为欧姆 */
-#define FOC_TS (1.0f / 20000.0f)    /* 电流环采样周期，单位为秒 */
-#define DENOMINATOR     \
-(2.0f * LS * 0.001f + RS * FOC_TS)  /* PI增益计算分母 */
-
-#define PID_BANDWIDTH_MIN_HZ (1u)       /* 电流环带宽下限，单位为Hz */
-#define PID_BANDWIDTH_MAX_HZ (5000u)    /* 电流环带宽上限，单位为Hz */
 
 /*===========================================================================*/
 /*  PID控制器                                                                */

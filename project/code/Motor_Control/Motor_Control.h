@@ -2,32 +2,10 @@
 #define MOTOR_CONTROL_H
 
 #include "zf_common_headfile.h"
+#include "Foc_config.h"
 #include "Foc_transform/Foc_transform.h"
 #include "PID/PID.h"
 #include "Function/Function.h"
-
-#define MOTOR_CURRENT_LOOP_HZ           (20000u)    /* 电流环执行频率，单位为Hz */
-#define MOTOR_SPEED_LOOP_HZ             (1000u)     /* 速度环执行频率，单位为Hz */
-#define MOTOR_POSITION_LOOP_HZ          (500u)      /* 位置环执行频率，单位为Hz */
-
-#define MOTOR_SPEED_LOOP_DIVIDER        \
-    (MOTOR_CURRENT_LOOP_HZ / MOTOR_SPEED_LOOP_HZ)       /* 速度环相对电流环的分频系数 */
-#define MOTOR_POSITION_LOOP_DIVIDER     \
-    (MOTOR_CURRENT_LOOP_HZ / MOTOR_POSITION_LOOP_HZ)    /* 位置环相对电流环的分频系数 */
-#define MOTOR_CURRENT_LOOP_TS           \
-    (1.0f / (float)MOTOR_CURRENT_LOOP_HZ)               /* 电流环采样周期，单位为秒 */
-#define MOTOR_SPEED_LOOP_TS             \
-    (1.0f / (float)MOTOR_SPEED_LOOP_HZ)                 /* 速度环采样周期，单位为秒 */
-#define MOTOR_POSITION_LOOP_TS          \
-    (1.0f / (float)MOTOR_POSITION_LOOP_HZ)              /* 位置环采样周期，单位为秒 */
-
-#define MOTOR_CURRENT_VECTOR_LIMIT_A     (10.0f)        /* d/q轴电流矢量固定限幅，单位为A */
-#define MOTOR_AB_FILTER_BW_MIN_HZ        (1.0f)         /* AB滤波器带宽下限，单位为Hz */
-#define MOTOR_AB_FILTER_BW_MAX_HZ        (500.0f)       /* AB滤波器带宽上限，单位为Hz */
-#define MOTOR_PLL_EMF_MIN_V              (0.02f)        /* PLL允许鉴相的最小反电动势幅值，单位为V */
-#define MOTOR_PLL_DAMPING_RATIO          (0.70710678f)  /* PLL固定阻尼比 */
-#define MOTOR_PLL_OMEGA_LIMIT_RAD_S      (3000.0f)      /* PLL固定电角速度限幅，单位为rad/s */
-#define MOTOR_PLL_INTEGRAL_LIMIT_RAD_S   (3000.0f)      /* PLL固定积分项限幅，单位为rad/s */
 
 /*===========================================================================*/
 /*  电机零点校准参数                                                          */
@@ -159,6 +137,36 @@ typedef struct
 } Foc_PositionLoop_t;
 
 /*===========================================================================*/
+/*  HFI                                                                      */
+/*===========================================================================*/
+typedef struct
+{
+    float Injection_voltage;          /* 高频注入电压幅值，单位为V */
+    float Injection_frequency;        /* 高频注入目标频率，单位为Hz */
+    float Demod_bandwidth;            /* 解调低通带宽，单位为Hz */
+    float Demod_coefficient;          /* 解调低通离散系数 */
+    float Demod_amplitude;            /* 解调归一化幅值，单位为A */
+
+    float Iq_previous;                /* 上一周期HFI坐标系q轴电流 */
+    float Iq_delta;                   /* 相邻周期q轴电流变化量 */
+    float Demod_raw;                  /* 同步解调原始值 */
+    float Demod_filter;               /* 同步解调滤波值 */
+    float Injection_voltage_applied;  /* 实际生效的注入电压，单位为V */
+
+    uint16 Carrier_half_count;        /* 载波半周期控制节拍数 */
+    uint16 Carrier_count;             /* 当前载波计数 */
+    uint16 Polarity_offset;           /* 磁极极性补偿，取值为0或16384 */
+
+    int8 Command_sign;                /* 即将输出的注入极性 */
+    int8 Applied_sign;                /* 当前电流差分对应的注入极性 */
+    int8 Error_direction;             /* 解调误差方向，取值为+1或-1 */
+
+    uint8 Enabled;                    /* 高频注入使能标志 */
+    uint8 Ready;                      /* 位置估算稳定标志 */
+    uint8 Polarity_ready;             /* 磁极极性识别完成标志 */
+} HFI_t;
+
+/*===========================================================================*/
 /*  PLL                                                                      */
 /*===========================================================================*/
 typedef struct
@@ -177,7 +185,7 @@ typedef struct
     float Electrical_angle_rad;             /* PLL内部未补偿电角度，单位为rad */
     int8 Direction;                         /* 当前观测方向，取值为+1或-1 */
 
-}PLL_t;
+} PLL_t;
 
 /*===========================================================================*/
 /*  SMO数据结构                                                               */
@@ -203,11 +211,9 @@ typedef struct
     float Filter_bandwidth;                 /* 反电动势滤波器带宽，单位为Hz */
     uint8 Ready;                            /* SMO就绪标志 */
 
-    float A;                                /*离散系数*/
-    float B;
-
-    PLL_t PLL;                              /* PLL对象 */
-}SMO_t;
+    float A;                                /* 电流观测器上一周期电流离散系数 */
+    float B;                                /* 电流观测器输入电压离散系数 */
+} SMO_t;
 
 /*===========================================================================*/
 /*  FOC电机控制对象                                                           */
@@ -220,7 +226,9 @@ typedef struct
     Foc_CurrentLoop_t Current_loop;         /* 电流环对象 */
     Foc_SpeedLoop_t Speed_loop;             /* 速度环对象 */
     Foc_PositionLoop_t Position_loop;       /* 位置环对象 */
+    HFI_t HFI;                              /* 高频注入位置估算对象 */
     SMO_t SMO;                              /* SMO对象 */
+    PLL_t PLL;                              /* 公共角度跟踪PLL */
     float Ab_filter_bandwidth;              /* 当前生效的AB滤波器带宽，单位为Hz */
 
     uint8 Pole_pairs;                       /* 电机极对数 */
@@ -256,7 +264,14 @@ void    Motor_Control_SetPositionKp                 (float Kp,
                                                      float Deadband_degree,
                                                      float SoftRange_degree,
                                                      float SpeedDeadband_rpm);
-void    Motor_Control_SetPllBandwidth               (float Bandwidth_hz);
+void    PLL_SetBandwidth                             (PLL_t *Pll,
+                                                     float Bandwidth_hz);
+void    PLL_Reset                                    (PLL_t *Pll,
+                                                     int8 Direction);
+void    PLL_Update                                   (PLL_t *Pll,
+                                                     float Phase_error,
+                                                     float Sample_time,
+                                                     uint8 Pole_pairs);
 void    Angle_Update                                (void);
 float   Motor_Control_GetMechanicalDegree           (void);
 void    RPM_Cal                                     (void);

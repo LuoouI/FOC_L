@@ -27,10 +27,7 @@ SVPWM_t SVPWM =
  ************************************************/
 static float SVPWM_GetDutyRange(void)
 {
-    return Float_Limit(
-        (float)TCPWM_DUTY_OUTPUT_LIMIT / (float)TCPWM_DUTY_MAX,
-        0.0f,
-        1.0f);
+    return (float)TCPWM_DUTY_OUTPUT_LIMIT / (float)TCPWM_DUTY_MAX;
 }
 
 /***********************************************
@@ -116,11 +113,6 @@ static uint16 SVPWM_VoltageToDuty(float PhaseVoltage, float DutyRange)
 void VBUS_Get(void)
 {
     SVPWM.VBUS = My_ADC_GetBatteryVoltage();
-    if (SVPWM.VBUS < 0.0f)
-    {
-        SVPWM.VBUS = 0.0f;
-    }
-
     SVPWM_DQ_Limit_Update();
 }
 
@@ -135,13 +127,6 @@ void SVPWM_DQ_Limit_Update(void)
 {
     float Duty_range;
 
-    SVPWM.V_Margin = Float_Limit(SVPWM.V_Margin, 0.0f, 1.0f);
-    if (SVPWM.VBUS <= 0.0f)
-    {
-        SVPWM.DQ_Limit = 0.0f;
-        return;
-    }
-
     Duty_range = SVPWM_GetDutyRange();
 
     /* 将实际占空比范围和调制裕量同时计入最大电压矢量。 */
@@ -154,9 +139,9 @@ void SVPWM_DQ_Limit_Update(void)
  * @param : Ud d轴电压，单位为V
  * @param : Uq q轴电压，单位为V
  * @param : ElectricalAngle 电角度，0~32767对应0~2PI
- * @param : DutyA A相万分比占空比，输出限制为0~9000，可为空
- * @param : DutyB B相万分比占空比，输出限制为0~9000，可为空
- * @param : DutyC C相万分比占空比，输出限制为0~9000，可为空
+ * @param : DutyA A相万分比占空比地址，由调用者保证有效
+ * @param : DutyB B相万分比占空比地址，由调用者保证有效
+ * @param : DutyC C相万分比占空比地址，由调用者保证有效
  * @return: 实际电压矢量与请求电压矢量的比例，范围0~1
  * @date  : 2026-08-17
  * @author: L
@@ -202,23 +187,10 @@ float foc_voltage_calc_duty(float Ud,
     Ub += Uzero;
     Uc += Uzero;
 
-    if (DutyA != NULL)
-    {
-        *DutyA = SVPWM_VoltageToDuty(Ua, Duty_range);
-    }
-    if (DutyB != NULL)
-    {
-        *DutyB = SVPWM_VoltageToDuty(Ub, Duty_range);
-    }
-    if (DutyC != NULL)
-    {
-        *DutyC = SVPWM_VoltageToDuty(Uc, Duty_range);
-    }
-
-    if ((DutyA != NULL) && (DutyB != NULL) && (DutyC != NULL))
-    {
-        SVPWM_DutyCache_Update(*DutyA, *DutyB, *DutyC);
-    }
+    *DutyA = SVPWM_VoltageToDuty(Ua, Duty_range);
+    *DutyB = SVPWM_VoltageToDuty(Ub, Duty_range);
+    *DutyC = SVPWM_VoltageToDuty(Uc, Duty_range);
+    SVPWM_DutyCache_Update(*DutyA, *DutyB, *DutyC);
 
     return VoltageScale;
 }

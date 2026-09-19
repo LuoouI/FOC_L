@@ -43,11 +43,6 @@ void My_LED_Init(void)
  ************************************************/
 void My_LED_SetLedState(LED_State_t LedState)
 {
-    if ((LedState != LED_ON) && (LedState != LED_BLINK) && (LedState != LED_OFF))
-    {
-        LedState = LED_OFF;
-    }
-
     MyLED_LedState = LedState;
     MyLED_BlinkElapsedMs = 0u;
 

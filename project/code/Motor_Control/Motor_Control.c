@@ -79,7 +79,7 @@ Foc_motor_t Motor =
         .Track_ready = 0u,
         .In_deadband = 0u
     },
-    .SMO = 
+    .SMO =
     {   
         .E_alpha = 0.0f,
         .E_beta = 0.0f,
@@ -89,21 +89,21 @@ Foc_motor_t Motor =
         .Boundary_current = 1.5f,
         .Filter_bandwidth = 500.0f,
         .A = (2.0f * LS * 0.001f - RS * FOC_TS) / DENOMINATOR,
-        .B = 2.0 * FOC_TS / DENOMINATOR,
-        .PLL = 
-        {
-            .Bandwidth = 250.0f,
-            .Kp = 177.7f,
-            .Ki = 15791.4f,
-            .Integral_sum = 0.0f,
-            .Phase_error = 0.0f,
-            .Mechanical_angle_est = 0u,
-            .Electrical_angle_est = 0u,
-            .Omega_est = 0.0f,
-            .Mechanical_angle_rad = 0.0f,
-            .Electrical_angle_rad = 0.0f,
-            .Direction = 1
-        }
+        .B = 2.0f * FOC_TS / DENOMINATOR
+    },
+    .PLL =
+    {
+        .Bandwidth = 250.0f,
+        .Kp = 0.0f,
+        .Ki = 0.0f,
+        .Integral_sum = 0.0f,
+        .Phase_error = 0.0f,
+        .Mechanical_angle_est = 0u,
+        .Electrical_angle_est = 0u,
+        .Omega_est = 0.0f,
+        .Mechanical_angle_rad = 0.0f,
+        .Electrical_angle_rad = 0.0f,
+        .Direction = 1
     },
     .Ab_filter_bandwidth = 50.0f,
     .Pole_pairs = 7u,
@@ -132,17 +132,6 @@ static float Speed_Ramp(float Command_rpm,
 {
     float Ramp_step;
     float Speed_error;
-
-    if ((Command_rpm != Command_rpm) ||
-        (Target_rpm != Target_rpm))
-    {
-        return 0.0f;
-    }
-
-    if ((Ramp_rate != Ramp_rate) || (Ramp_rate <= 0.0f))
-    {
-        return Target_rpm;
-    }
 
     Ramp_step = Ramp_rate * MOTOR_SPEED_LOOP_TS;
     Speed_error = Command_rpm - Target_rpm;
@@ -544,12 +533,6 @@ void Zero_Calibration(void)
 
     PHASE_Test();
 
-    if ((Motor_zeroCalib.Step_count == 0u) ||
-        (Motor_zeroCalib.Sample_count == 0u))
-    {
-        return;
-    }
-
     Irq_state = interrupt_global_disable();
     Angle_Unwrap_Clear(&Travel_angle);
 
@@ -716,9 +699,9 @@ static void Motor_openloop_set(float Uq, float Ud, int16 Step)
 
 /***********************************************
  * @brief : 按指定幅值限制d/q轴电流矢量
- * @param : IdValue d轴电流地址
- * @param : IqValue q轴电流地址
- * @param : Limit 电流矢量幅值上限，单位为A
+ * @param : IdValue d轴电流地址，由调用者保证有效
+ * @param : IqValue q轴电流地址，由调用者保证有效
+ * @param : Limit 电流矢量幅值上限，单位为A，由调用者保证大于0
  * @return: 无
  * @date  : 2026-08-29
  * @author: L
@@ -730,24 +713,6 @@ static void Current_VectorLimit(float *IdValue,
     float Current_square;
     float Limit_square;
     float Scale;
-
-    if ((IdValue == NULL) || (IqValue == NULL))
-    {
-        return;
-    }
-
-    if ((Limit <= 0.0f) ||
-        (*IdValue != *IdValue) ||
-        (*IqValue != *IqValue) ||
-        (*IdValue > FLT_MAX) ||
-        (*IdValue < -FLT_MAX) ||
-        (*IqValue > FLT_MAX) ||
-        (*IqValue < -FLT_MAX))
-    {
-        *IdValue = 0.0f;
-        *IqValue = 0.0f;
-        return;
-    }
 
     Current_square = (*IdValue * *IdValue) + (*IqValue * *IqValue);
     Limit_square = Limit * Limit;
@@ -762,7 +727,7 @@ static void Current_VectorLimit(float *IdValue,
 /***********************************************
  * @brief : 根据d轴电流目标计算q轴可用电流幅值
  * @param : IdTarget d轴电流目标，单位为A
- * @param : Limit d/q轴电流矢量幅值上限，单位为A
+ * @param : Limit d/q轴电流矢量幅值上限，单位为A，由调用者保证大于0
  * @return: q轴可用电流幅值，单位为A
  * @date  : 2026-08-29
  * @author: L
@@ -770,13 +735,6 @@ static void Current_VectorLimit(float *IdValue,
 static float Current_GetIqLimit(float IdTarget, float Limit)
 {
     float Id_abs;
-
-    if ((IdTarget != IdTarget) ||
-        (Limit != Limit) ||
-        (Limit <= 0.0f))
-    {
-        return 0.0f;
-    }
 
     Id_abs = fabsf(IdTarget);
     if (Id_abs >= Limit)
@@ -1026,19 +984,6 @@ static void Position_Loop(void)
  ************************************************/
 void Motor_Control_SetCurrentBandwidth(uint16 BandwidthHz)
 {
-    if (BandwidthHz == 0u)
-    {
-        return;
-    }
-
-    if (BandwidthHz < PID_BANDWIDTH_MIN_HZ)
-    {
-        BandwidthHz = PID_BANDWIDTH_MIN_HZ;
-    }
-    else if (BandwidthHz > PID_BANDWIDTH_MAX_HZ)
-    {
-        BandwidthHz = PID_BANDWIDTH_MAX_HZ;
-    }
     if ((Motor.Current_loop.Bandwidth == BandwidthHz) &&
         (Motor.Current_loop.Id_pid.Kp != 0.0f) &&
         (Motor.Current_loop.Iq_pid.Kp != 0.0f))
@@ -1075,10 +1020,6 @@ void Motor_Control_Init(void)
     Motor_Control_SetCurrentBandwidth(Motor.Current_loop.Bandwidth);
 
     Voltage_limit = SVPWM.DQ_Limit;
-    if ((Voltage_limit != Voltage_limit) || (Voltage_limit < 0.0f))
-    {
-        Voltage_limit = 0.0f;
-    }
     PID_Config(
         &Motor.Current_loop.Id_pid,
         MOTOR_CURRENT_LOOP_TS,
@@ -1106,7 +1047,7 @@ void Motor_Control_Init(void)
         Motor.Position_loop.Deadband_degree,
         Motor.Position_loop.Soft_range_degree,
         Motor.Position_loop.Speed_deadband_rpm);
-    Motor_Control_SetPllBandwidth(Motor.SMO.PLL.Bandwidth);
+    PLL_SetBandwidth(&Motor.PLL, Motor.PLL.Bandwidth);
     Motor_Control_ResetObserver();
 }
 
@@ -1123,15 +1064,6 @@ void Motor_Control_SetSpeedPi(float Kp,
                               float Ki,
                               float IntegralLimit)
 {
-    if (IntegralLimit < 0.0f)
-    {
-        IntegralLimit = -IntegralLimit;
-    }
-    if (IntegralLimit > MOTOR_CURRENT_VECTOR_LIMIT_A)
-    {
-        IntegralLimit = MOTOR_CURRENT_VECTOR_LIMIT_A;
-    }
-
     /* 保留速度PI原始输出，由速度环按实时Iq能力限幅后进行反算。 */
     PID_Config(
         &Motor.Speed_loop.Pid,
@@ -1163,33 +1095,6 @@ void Motor_Control_SetPositionKp(float Kp,
                                  float SoftRange_degree,
                                  float SpeedDeadband_rpm)
 {
-    if (OutputLimit < 0.0f)
-    {
-        OutputLimit = -OutputLimit;
-    }
-    if ((Deadband_degree != Deadband_degree) ||
-        (Deadband_degree < 0.0f))
-    {
-        Deadband_degree = 0.0f;
-    }
-    if (Deadband_degree > 180.0f)
-    {
-        Deadband_degree = 180.0f;
-    }
-    if ((SoftRange_degree != SoftRange_degree) ||
-        (SoftRange_degree < 0.0f))
-    {
-        SoftRange_degree = 0.0f;
-    }
-    if (SoftRange_degree > 180.0f)
-    {
-        SoftRange_degree = 180.0f;
-    }
-    if ((SpeedDeadband_rpm != SpeedDeadband_rpm) ||
-        (SpeedDeadband_rpm < 0.0f))
-    {
-        SpeedDeadband_rpm = 0.0f;
-    }
     PID_Config(
         &Motor.Position_loop.Pid,
         MOTOR_POSITION_LOOP_TS,
@@ -1207,28 +1112,117 @@ void Motor_Control_SetPositionKp(float Kp,
 }
 
 /***********************************************
- * @brief : 根据自然频率带宽和固定阻尼比更新PLL内部PI增益
- * @param : Bandwidth_hz PLL自然频率带宽，单位为Hz
+ * @brief : 根据自然频率带宽和固定阻尼比更新指定PLL的PI增益
+ * @param : Pll PLL对象地址，由调用者保证有效
+ * @param : Bandwidth_hz PLL自然频率带宽，单位为Hz，需在输入边界完成校验
  * @return: 无
- * @date  : 2026-09-15
+ * @date  : 2026-09-20
  * @author: L
  ************************************************/
-void Motor_Control_SetPllBandwidth(float Bandwidth_hz)
+void PLL_SetBandwidth(PLL_t *Pll, float Bandwidth_hz)
 {
-    float Natural_omega = TWO_PI * Bandwidth_hz;
+    float Natural_omega;
 
-    Motor.SMO.PLL.Bandwidth = Bandwidth_hz;
-    Motor.SMO.PLL.Kp =
-        2.0f * MOTOR_PLL_DAMPING_RATIO * Natural_omega;
-    Motor.SMO.PLL.Ki = Natural_omega * Natural_omega;
-    Motor.SMO.PLL.Integral_sum = Float_Limit(
-        Motor.SMO.PLL.Integral_sum,
+    Natural_omega = TWO_PI * Bandwidth_hz;
+    Pll->Bandwidth = Bandwidth_hz;
+    Pll->Kp = 2.0f * MOTOR_PLL_DAMPING_RATIO * Natural_omega;
+    Pll->Ki = Natural_omega * Natural_omega;
+    Pll->Integral_sum = Float_Limit(
+        Pll->Integral_sum,
         -MOTOR_PLL_INTEGRAL_LIMIT_RAD_S,
         MOTOR_PLL_INTEGRAL_LIMIT_RAD_S);
-    Motor.SMO.PLL.Omega_est = Float_Limit(
-        Motor.SMO.PLL.Omega_est,
+    Pll->Omega_est = Float_Limit(
+        Pll->Omega_est,
         -MOTOR_PLL_OMEGA_LIMIT_RAD_S,
         MOTOR_PLL_OMEGA_LIMIT_RAD_S);
+}
+
+/***********************************************
+ * @brief : 清除指定PLL的动态状态并设置初始方向
+ * @param : Pll PLL对象地址，由调用者保证有效
+ * @param : Direction 初始方向，负值表示反向，其他值表示正向
+ * @return: 无
+ * @date  : 2026-09-20
+ * @author: L
+ ************************************************/
+void PLL_Reset(PLL_t *Pll, int8 Direction)
+{
+    Pll->Integral_sum = 0.0f;
+    Pll->Phase_error = 0.0f;
+    Pll->Mechanical_angle_est = 0u;
+    Pll->Electrical_angle_est = 0u;
+    Pll->Omega_est = 0.0f;
+    Pll->Mechanical_angle_rad = 0.0f;
+    Pll->Electrical_angle_rad = 0.0f;
+    Pll->Direction = (Direction < 0) ? -1 : 1;
+}
+
+/***********************************************
+ * @brief : 根据外部鉴相误差更新指定PLL的角速度和角度
+ * @param : Pll PLL对象地址，由调用者保证有效
+ * @param : Phase_error 已换算为弧度的鉴相误差
+ * @param : Sample_time PLL更新周期，单位为秒，由调用者保证大于0
+ * @param : Pole_pairs 电机极对数，由调用者保证大于0
+ * @return: 无
+ * @date  : 2026-09-20
+ * @author: L
+ ************************************************/
+void PLL_Update(PLL_t *Pll,
+                float Phase_error,
+                float Sample_time,
+                uint8 Pole_pairs)
+{
+    float Integral_next;
+    float Omega_unsaturated;
+    int32 Electrical_angle_count;
+    int32 Mechanical_angle_count;
+
+    Pll->Phase_error = Phase_error;
+    Integral_next =
+        Pll->Integral_sum + Pll->Ki * Pll->Phase_error * Sample_time;
+    Integral_next = Float_Limit(
+        Integral_next,
+        -MOTOR_PLL_INTEGRAL_LIMIT_RAD_S,
+        MOTOR_PLL_INTEGRAL_LIMIT_RAD_S);
+    Omega_unsaturated = Pll->Kp * Pll->Phase_error + Integral_next;
+    if (!(((Omega_unsaturated > MOTOR_PLL_OMEGA_LIMIT_RAD_S) &&
+           (Pll->Phase_error > 0.0f)) ||
+          ((Omega_unsaturated < -MOTOR_PLL_OMEGA_LIMIT_RAD_S) &&
+           (Pll->Phase_error < 0.0f))))
+    {
+        Pll->Integral_sum = Integral_next;
+    }
+    Pll->Omega_est = Float_Limit(
+        Pll->Kp * Pll->Phase_error + Pll->Integral_sum,
+        -MOTOR_PLL_OMEGA_LIMIT_RAD_S,
+        MOTOR_PLL_OMEGA_LIMIT_RAD_S);
+
+    Pll->Electrical_angle_rad += Pll->Omega_est * Sample_time;
+    Pll->Mechanical_angle_rad +=
+        Pll->Omega_est * Sample_time / (float)Pole_pairs;
+    while (Pll->Electrical_angle_rad >= TWO_PI)
+    {
+        Pll->Electrical_angle_rad -= TWO_PI;
+    }
+    while (Pll->Electrical_angle_rad < 0.0f)
+    {
+        Pll->Electrical_angle_rad += TWO_PI;
+    }
+    while (Pll->Mechanical_angle_rad >= TWO_PI)
+    {
+        Pll->Mechanical_angle_rad -= TWO_PI;
+    }
+    while (Pll->Mechanical_angle_rad < 0.0f)
+    {
+        Pll->Mechanical_angle_rad += TWO_PI;
+    }
+
+    Electrical_angle_count = (int32)(
+        Pll->Electrical_angle_rad * (float)ANGLE_PERIOD / TWO_PI);
+    Mechanical_angle_count = (int32)(
+        Pll->Mechanical_angle_rad * (float)ANGLE_PERIOD / TWO_PI);
+    Pll->Electrical_angle_est = Angle_Wrap(Electrical_angle_count);
+    Pll->Mechanical_angle_est = Angle_Wrap(Mechanical_angle_count);
 }
 
 /*===========================================================================*/
@@ -1248,13 +1242,6 @@ static void Sensorless_Observer_UpdateVoltage(void)
     float Phase_voltage_b;
     float Phase_voltage_c;
     float Common_voltage;
-
-    if (SVPWM.VBUS <= 0.0f)
-    {
-        Motor.SMO.U_alpha_pre = 0.0f;
-        Motor.SMO.U_beta_pre = 0.0f;
-        return;
-    }
 
     Phase_voltage_a =
         (float)SVPWM.DutyA * SVPWM.VBUS /
@@ -1297,14 +1284,7 @@ void Motor_Control_ResetObserver(void)
     Motor.SMO.E_beta_filter = 0.0f;
     Motor.SMO.Ready = 0u;
 
-    Motor.SMO.PLL.Integral_sum = 0.0f;
-    Motor.SMO.PLL.Phase_error = 0.0f;
-    Motor.SMO.PLL.Mechanical_angle_est = 0u;
-    Motor.SMO.PLL.Electrical_angle_est = 0u;
-    Motor.SMO.PLL.Omega_est = 0.0f;
-    Motor.SMO.PLL.Mechanical_angle_rad = 0.0f;
-    Motor.SMO.PLL.Electrical_angle_rad = 0.0f;
-    Motor.SMO.PLL.Direction = (Motor.Foc_direction < 0) ? -1 : 1;
+    PLL_Reset(&Motor.PLL, Motor.Foc_direction);
 }
 
 /***********************************************
@@ -1351,7 +1331,7 @@ static int8 Sensorless_PLL_GetDirection(void)
         }
     }
 
-    return (Motor.SMO.PLL.Direction < 0) ? -1 : 1;
+    return (Motor.PLL.Direction < 0) ? -1 : 1;
 }
 
 /***********************************************
@@ -1368,8 +1348,7 @@ static float Sensorless_PLL_AlignMechanicalSector(float Mechanical_output_rad)
     float Sector_error_rad;
     int32 Sector_offset;
 
-    if ((Motor.Control_mode != MOTOR_CONTROL_ENCODER_FOC) ||
-        (Motor.Pole_pairs == 0u))
+    if (Motor.Control_mode != MOTOR_CONTROL_ENCODER_FOC)
     {
         return Mechanical_output_rad;
     }
@@ -1399,20 +1378,19 @@ static float Sensorless_PLL_AlignMechanicalSector(float Mechanical_output_rad)
 /***********************************************
  * @brief : 使用滤波后的Alpha/Beta轴反电动势更新PLL角度和电角速度
  * @param : 无
- * @return: 无，估算结果保存到Motor.SMO.PLL
- * @date  : 2026-09-15
+ * @return: 无，估算结果保存到公共PLL对象
+ * @date  : 2026-09-20
  * @author: L
  ************************************************/
 static void Sensorless_PLL_Update(void)
 {
-    PLL_t *Pll = &Motor.SMO.PLL;
+    PLL_t *Pll = &Motor.PLL;
     float E_alpha = Motor.SMO.E_alpha_filter;
     float E_beta = Motor.SMO.E_beta_filter;
     float Emf_amplitude;
     float Sin_theta;
     float Cos_theta;
-    float Integral_next;
-    float Omega_unsaturated;
+    float Phase_error;
     float Filter_omega;
     float Phase_compensation;
     float Electrical_output_rad;
@@ -1420,18 +1398,6 @@ static void Sensorless_PLL_Update(void)
     int32 Electrical_angle_count;
     int32 Mechanical_angle_count;
     uint16 Electrical_angle_raw;
-
-    if ((Pll->Bandwidth <= 0.0f) ||
-        (Pll->Kp < 0.0f) ||
-        (Pll->Ki < 0.0f) ||
-        (Motor.SMO.Filter_bandwidth <= 0.0f) ||
-        (Motor.Pole_pairs == 0u))
-    {
-        Pll->Integral_sum = 0.0f;
-        Pll->Phase_error = 0.0f;
-        Pll->Omega_est = 0.0f;
-        return;
-    }
 
     Emf_amplitude = sqrtf(E_alpha * E_alpha + E_beta * E_beta);
     if (!(Emf_amplitude >= MOTOR_PLL_EMF_MIN_V))
@@ -1450,52 +1416,12 @@ static void Sensorless_PLL_Update(void)
     Cos_theta = fast_cosf(Electrical_angle_raw);
 
     /* 方向补偿后，归一化q轴反电动势等于sin(实际角度-估算角度)。 */
-    Pll->Phase_error =
+    Phase_error =
         (float)Pll->Direction *
         (-E_alpha * Cos_theta - E_beta * Sin_theta) /
         Emf_amplitude;
-    Pll->Phase_error = Float_Limit(Pll->Phase_error, -1.0f, 1.0f);
-    Pll->Phase_error = asinf(Pll->Phase_error);
-
-    Integral_next =
-        Pll->Integral_sum + Pll->Ki * Pll->Phase_error * FOC_TS;
-    Integral_next = Float_Limit(
-        Integral_next,
-        -MOTOR_PLL_INTEGRAL_LIMIT_RAD_S,
-        MOTOR_PLL_INTEGRAL_LIMIT_RAD_S);
-    Omega_unsaturated =
-        Pll->Kp * Pll->Phase_error + Integral_next;
-    if (!(((Omega_unsaturated > MOTOR_PLL_OMEGA_LIMIT_RAD_S) &&
-           (Pll->Phase_error > 0.0f)) ||
-          ((Omega_unsaturated < -MOTOR_PLL_OMEGA_LIMIT_RAD_S) &&
-           (Pll->Phase_error < 0.0f))))
-    {
-        Pll->Integral_sum = Integral_next;
-    }
-    Pll->Omega_est = Float_Limit(
-        Pll->Kp * Pll->Phase_error + Pll->Integral_sum,
-        -MOTOR_PLL_OMEGA_LIMIT_RAD_S,
-        MOTOR_PLL_OMEGA_LIMIT_RAD_S);
-
-    Pll->Electrical_angle_rad += Pll->Omega_est * FOC_TS;
-    Pll->Mechanical_angle_rad +=
-        Pll->Omega_est * FOC_TS / (float)Motor.Pole_pairs;
-    while (Pll->Electrical_angle_rad >= TWO_PI)
-    {
-        Pll->Electrical_angle_rad -= TWO_PI;
-    }
-    while (Pll->Electrical_angle_rad < 0.0f)
-    {
-        Pll->Electrical_angle_rad += TWO_PI;
-    }
-    while (Pll->Mechanical_angle_rad >= TWO_PI)
-    {
-        Pll->Mechanical_angle_rad -= TWO_PI;
-    }
-    while (Pll->Mechanical_angle_rad < 0.0f)
-    {
-        Pll->Mechanical_angle_rad += TWO_PI;
-    }
+    Phase_error = asinf(Float_Limit(Phase_error, -1.0f, 1.0f));
+    PLL_Update(Pll, Phase_error, FOC_TS, Motor.Pole_pairs);
 
     /* 补偿反电动势一阶低通产生的随转速变化的相位滞后。 */
     Filter_omega = TWO_PI * Motor.SMO.Filter_bandwidth;

@@ -2,26 +2,6 @@
 #include "float.h"
 
 /***********************************************
- * @brief : 将上下限整理为从小到大的有效范围
- * @param : MinValue 原始下限
- * @param : MaxValue 原始上限
- * @return: void
- * @date  : 2026-08-26
- * @author: L
- ************************************************/
-static void PID_SortLimit(float *MinValue, float *MaxValue)
-{
-    float Temp;
-
-    if (*MinValue > *MaxValue)
-    {
-        Temp = *MinValue;
-        *MinValue = *MaxValue;
-        *MaxValue = Temp;
-    }
-}
-
-/***********************************************
  * @brief : 对PID积分项进行限幅
  * @param : Pid PID控制器对象
  * @return: void
@@ -48,11 +28,6 @@ static void PID_LimitIntegrator(PID_t *Pid)
  ************************************************/
 void PID_Init(PID_t *Pid, float Kp, float Ki, float Kd)
 {
-    if (Pid == NULL)
-    {
-        return;
-    }
-
     Pid->Kp = Kp;
     Pid->Ki = Ki;
     Pid->Kd = Kd;
@@ -89,32 +64,13 @@ void PID_Config(PID_t *Pid,
                 float IntegralMin,
                 float IntegralMax)
 {
-    if (Pid == NULL)
-    {
-        return;
-    }
-
-    if (SampleTime > 0.0f)
-    {
-        Pid->T = SampleTime;
-    }
-    else
-    {
-        Pid->T = FOC_TS;
-    }
-
+    Pid->T = SampleTime;
     Pid->Tau = Tau;
-    if (Pid->Tau < 0.0f)
-    {
-        Pid->Tau = 0.0f;
-    }
     Pid->LimMin = OutputMin;
     Pid->LimMax = OutputMax;
     Pid->LimMinInt = IntegralMin;
     Pid->LimMaxInt = IntegralMax;
 
-    PID_SortLimit(&Pid->LimMin, &Pid->LimMax);
-    PID_SortLimit(&Pid->LimMinInt, &Pid->LimMaxInt);
     PID_LimitIntegrator(Pid);
     Pid->OUT = Float_Limit(Pid->OUT, Pid->LimMin, Pid->LimMax);
 }
@@ -128,11 +84,6 @@ void PID_Config(PID_t *Pid,
  ************************************************/
 void PID_Clear(PID_t *Pid)
 {
-    if (Pid == NULL)
-    {
-        return;
-    }
-
     Pid->Ek = 0.0f;
     Pid->last_Ek = 0.0f;
     Pid->Ek_sum = 0.0f;
@@ -160,18 +111,7 @@ float PID_Update(PID_t *Pid, float Setpoint, float Measurement)
     float SampleTime;
     float FilterDenominator;
 
-    if (Pid == NULL)
-    {
-        return 0.0f;
-    }
-
     SampleTime = Pid->T;
-    if (SampleTime <= 0.0f)
-    {
-        SampleTime = FOC_TS;
-        Pid->T = SampleTime;
-    }
-
     Error = Setpoint - Measurement;
     Pid->Ek = Error;
 
@@ -237,23 +177,6 @@ void PID_SetBandwidth(PID_t *Pid,
 {
     float Omega;
 
-    if ((Pid == NULL) ||
-        (InductanceMh != InductanceMh) ||
-        (ResistanceOhm != ResistanceOhm) ||
-        (InductanceMh <= 0.0f) ||
-        (ResistanceOhm <= 0.0f))
-    {
-        return;
-    }
-
-    if (BandwidthHz < PID_BANDWIDTH_MIN_HZ)
-    {
-        BandwidthHz = PID_BANDWIDTH_MIN_HZ;
-    }
-    else if (BandwidthHz > PID_BANDWIDTH_MAX_HZ)
-    {
-        BandwidthHz = PID_BANDWIDTH_MAX_HZ;
-    }
     Omega = TWO_PI * (float)BandwidthHz;
     Pid->Kp = Omega * InductanceMh / 1000.0f;
     Pid->Ki = Omega * ResistanceOhm;
@@ -269,22 +192,6 @@ void PID_SetBandwidth(PID_t *Pid,
  ************************************************/
 void PID_SetIntegralLimit(PID_t *Pid, float IntegralLimit)
 {
-    if (Pid == NULL)
-    {
-        return;
-    }
-
-    if ((IntegralLimit != IntegralLimit) ||
-        (IntegralLimit > FLT_MAX) ||
-        (IntegralLimit < -FLT_MAX))
-    {
-        IntegralLimit = 0.0f;
-    }
-    else if (IntegralLimit < 0.0f)
-    {
-        IntegralLimit = -IntegralLimit;
-    }
-
     Pid->LimMinInt = -IntegralLimit;
     Pid->LimMaxInt = IntegralLimit;
     PID_LimitIntegrator(Pid);
@@ -312,22 +219,13 @@ void PID_BackCalculation(PID_t *Pid, float ActualOutput)
     float SampleTime;
     float TrackingGain;
 
-    if ((Pid == NULL) || (Pid->Kp == 0.0f) || (Pid->Ki == 0.0f))
+    if ((Pid->Kp == 0.0f) || (Pid->Ki == 0.0f))
     {
         return;
     }
 
     TrackingGain = Pid->Ki / Pid->Kp;
-    if (TrackingGain <= 0.0f)
-    {
-        return;
-    }
-
     SampleTime = Pid->T;
-    if (SampleTime <= 0.0f)
-    {
-        SampleTime = FOC_TS;
-    }
 
     /* 以Kp/Ki作为跟踪时间常数，使积分器回跟执行器实际输出。 */
     Pid->Integrator +=
@@ -350,16 +248,6 @@ void PID_BackCalculation(PID_t *Pid, float ActualOutput)
  ************************************************/
 float PID_Calc(PID_t *Pid, float Ref, float Fbk, float IntegralLimit)
 {
-    if (Pid == NULL)
-    {
-        return 0.0f;
-    }
-
-    if (IntegralLimit < 0.0f)
-    {
-        IntegralLimit = -IntegralLimit;
-    }
-
     Pid->LimMinInt = -IntegralLimit;
     Pid->LimMaxInt = IntegralLimit;
 

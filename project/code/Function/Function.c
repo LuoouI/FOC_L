@@ -75,11 +75,6 @@ uint16 Angle_Wrap(int32 Angle)
  ************************************************/
 void Angle_Unwrap_Clear(AngleUnwrap_t *Unwrap)
 {
-    if (Unwrap == NULL)
-    {
-        return;
-    }
-
     Unwrap->Last = 0u;
     Unwrap->Value = 0;
     Unwrap->Ready = 0u;
@@ -98,11 +93,6 @@ int32 Angle_Unwrap(AngleUnwrap_t *Unwrap, uint16 Angle)
     int32 Delta;
 
     Angle = Angle_Wrap((int32)Angle);
-    if (Unwrap == NULL)
-    {
-        return (int32)Angle;
-    }
-
     if (Unwrap->Ready == 0u)
     {
         Unwrap->Last = Angle;

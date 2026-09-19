@@ -392,7 +392,7 @@ static void Foc_Protocol_SendObserverParameters(void)
     Foc_Protocol_WriteFloat(
         &Payload[8],
         Motor.SMO.Filter_bandwidth);
-    Foc_Protocol_WriteFloat(&Payload[12], Motor.SMO.PLL.Bandwidth);
+    Foc_Protocol_WriteFloat(&Payload[12], Motor.PLL.Bandwidth);
 
     Crc = Foc_Protocol_Crc16(
         &Frame[2],
@@ -450,7 +450,7 @@ static void Foc_Protocol_HandleObserverParameterWrite(const uint8 *Payload)
     Motor.SMO.K_slide = Smo_gain;
     Motor.SMO.Boundary_current = Smo_boundary_current;
     Motor.SMO.Filter_bandwidth = Smo_filter_bandwidth;
-    Motor_Control_SetPllBandwidth(Pll_bandwidth);
+    PLL_SetBandwidth(&Motor.PLL, Pll_bandwidth);
 
     if ((Protocol.Enabled == 0u) ||
         (Observer_was_active == 0u) ||
@@ -909,11 +909,11 @@ static void Foc_Protocol_SendObserverWaveform(void)
         &Frame[6],
         FOC_PROTOCOL_OBSERVER_WAVEFORM_LENGTH);
 
-    Mechanical_angle = (float)Motor.SMO.PLL.Mechanical_angle_est *
+    Mechanical_angle = (float)Motor.PLL.Mechanical_angle_est *
                        360.0f / (float)ANGLE_PERIOD;
-    Electrical_angle = (float)Motor.SMO.PLL.Electrical_angle_est *
+    Electrical_angle = (float)Motor.PLL.Electrical_angle_est *
                        360.0f / (float)ANGLE_PERIOD;
-    Phase_error_degree = Motor.SMO.PLL.Phase_error *
+    Phase_error_degree = Motor.PLL.Phase_error *
                          360.0f / TWO_PI;
     Iq_error = Foc_Protocol_CalculateObserverIqError();
 
@@ -930,7 +930,7 @@ static void Foc_Protocol_SendObserverWaveform(void)
         Motor.SMO.E_beta_filter);
     Foc_Protocol_WriteFloat(&Payload[28], Mechanical_angle);
     Foc_Protocol_WriteFloat(&Payload[32], Electrical_angle);
-    Foc_Protocol_WriteFloat(&Payload[36], Motor.SMO.PLL.Omega_est);
+    Foc_Protocol_WriteFloat(&Payload[36], Motor.PLL.Omega_est);
     Foc_Protocol_WriteFloat(&Payload[40], Phase_error_degree);
     /* 将实际Clarke电流和Iq误差追加到负载末尾，保持既有字段偏移不变。 */
     Foc_Protocol_WriteFloat(&Payload[44], Current.clark.Alpha);
@@ -1214,24 +1214,24 @@ void Foc_Protocol_CaptureObserverStream(void)
          FOC_PROTOCOL_OBSERVER_FIELD_PLL_ELECTRICAL_ANGLE) != 0u)
     {
         Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_PLL_ELECTRICAL_ANGLE] =
-            (float)Motor.SMO.PLL.Electrical_angle_est *
+            (float)Motor.PLL.Electrical_angle_est *
             360.0f / (float)ANGLE_PERIOD;
     }
     if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_PLL_OMEGA) != 0u)
     {
         Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_PLL_OMEGA] =
-            Motor.SMO.PLL.Omega_est;
+            Motor.PLL.Omega_est;
     }
     if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_PLL_PHASE_ERROR) != 0u)
     {
         Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_PLL_PHASE_ERROR] =
-            Motor.SMO.PLL.Phase_error * 360.0f / TWO_PI;
+            Motor.PLL.Phase_error * 360.0f / TWO_PI;
     }
     if ((Observer_mask &
          FOC_PROTOCOL_OBSERVER_FIELD_PLL_MECHANICAL_ANGLE) != 0u)
     {
         Sample->Values[FOC_PROTOCOL_OBSERVER_VALUE_PLL_MECHANICAL_ANGLE] =
-            (float)Motor.SMO.PLL.Mechanical_angle_est *
+            (float)Motor.PLL.Mechanical_angle_est *
             360.0f / (float)ANGLE_PERIOD;
     }
     if ((Observer_mask & FOC_PROTOCOL_OBSERVER_FIELD_SPEED_ACTUAL) != 0u)
