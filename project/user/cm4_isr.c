@@ -144,15 +144,23 @@ void pit0_ch21_isr()                    // 定时器通道 21 周期中断服务
 
 // **************************** 串口中断函数 ****************************
 // 串口0默认作为调试串口
+/***********************************************
+ * @brief : 从串口0接收寄存器取出字节并交给FOC协议缓冲
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-09-28
+ * @author: L
+ ************************************************/
 void uart0_isr (void)
 {
-    if(uart_isr_mask(UART_0))            // 串口0接收中断
+    uint8 Receive_data;
+
+    if (uart_isr_mask(UART_0) != 0u)
     {
-        
-    #if DEBUG_UART_USE_INTERRUPT             // 如果开启 debug 串口中断
-            debug_interrupr_handler();       // 调用 debug 串口接收处理函数 数据会被 debug 环形缓冲区读取
-    #endif                                   // 如果修改了 DEBUG_UART_INDEX 那这段代码需要放到对应的串口中断去
-      
+        if (uart_query_byte(UART_0, &Receive_data) != 0u)
+        {
+            Foc_Protocol_ReceiveByte(Receive_data);
+        }
     }
     else                                 // 串口0发送中断
     {           
