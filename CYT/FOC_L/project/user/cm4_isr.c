@@ -51,11 +51,12 @@ void pit0_ch1_isr()                     // 定时器通道 1 周期中断服务�
 void pit0_ch2_isr()                     // 定时器通道 2 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH2);
-    
-    VBUS_Get();    // 获取母线电压
-    RPM_Cal();      // 转速计算
-    Motor_Torque_Estimate(Current.park.Iq); // 估算电机转矩
-    Foc_Protocol_Tick1ms(); // 更新上位机协议时间基准
+
+    /* 估算电机转矩 */
+    Motor_Torque_Estimate();
+
+    /* 更新上位机协议时间基准 */
+    Foc_Protocol_Tick1ms();
 
 }
 
@@ -63,17 +64,17 @@ void pit0_ch10_isr()                    // 定时器通道 10 周期中断服务
 {
     pit_isr_flag_clear(PIT_CH10);
     
-   //勿动（计数器和adc冲突）
+   /* 勿动（计数器和adc冲突）*/
 }
 
 void pit0_ch11_isr()                    // 定时器通道 11 周期中断服务函数      
 {
     pit_isr_flag_clear(PIT_CH11);
     
-    // // 按键扫描
-    // key_scanner();
+    /* 按键扫描  若要使用按键需要按键初始化 */
+    // key_scanner();   
 
-    // LED服务函数
+    /* LED服务函数 */
     My_LED_CheckVoltage();
     My_LED_Service(10u);
 
@@ -143,15 +144,23 @@ void pit0_ch21_isr()                    // 定时器通道 21 周期中断服务
 
 // **************************** 串口中断函数 ****************************
 // 串口0默认作为调试串口
+/***********************************************
+ * @brief : 从串口0接收寄存器取出字节并交给FOC协议缓冲
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-09-28
+ * @author: L
+ ************************************************/
 void uart0_isr (void)
 {
-    if(uart_isr_mask(UART_0))            // 串口0接收中断
+    uint8 Receive_data;
+
+    if (uart_isr_mask(UART_0) != 0u)
     {
-        
-    #if DEBUG_UART_USE_INTERRUPT             // 如果开启 debug 串口中断
-            debug_interrupr_handler();       // 调用 debug 串口接收处理函数 数据会被 debug 环形缓冲区读取
-    #endif                                   // 如果修改了 DEBUG_UART_INDEX 那这段代码需要放到对应的串口中断去
-      
+        if (uart_query_byte(UART_0, &Receive_data) != 0u)
+        {
+            Foc_Protocol_ReceiveByte(Receive_data);
+        }
     }
     else                                 // 串口0发送中断
     {           

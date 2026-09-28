@@ -4,16 +4,16 @@
 
 ABFilter_t Angle = {0};     // 角度滤波器
 
+/***********************************************
+ * @brief : 初始化AB滤波器参数
+ * @param : Flt 滤波器结构体指针
+ * @param : Param AB滤波器参数结构体指针
+ * @return: 无
+ * @date  : 2026-08-26
+ * @author: L
+ ************************************************/
 void ABFilter_Init(ABFilter_t *Flt, const ABFilterParam_t *Param)
 {
-    if ((Flt == NULL) ||
-        (Param == NULL) ||
-        (Param->Ts <= 0.0f) ||
-        (Param->Bw_hz <= 0.0f))
-    {
-        return;
-    }
-
     Flt->Param = *Param;
     /* 使用精确离散映射，保证高带宽下的位置修正系数小于1。 */
     Flt->A = 1.0f - expf(-TWO_PI * Param->Bw_hz * Param->Ts);
@@ -24,15 +24,18 @@ void ABFilter_Init(ABFilter_t *Flt, const ABFilterParam_t *Param)
     Flt->First = 0U;
 }
 
+/***********************************************
+ * @brief : 更新AB滤波器并输出角速度
+ * @param : Flt 滤波器结构体指针
+ * @param : MeasAng 编码器测量角度，单位为弧度
+ * @return: 滤波后的角速度，单位为弧度每秒
+ * @date  : 2026-08-26
+ * @author: L
+ ************************************************/
 float ABFilter_Update(ABFilter_t *Flt, float MeasAng)
 {
     float AngErr;
     float ThetaPred;
-
-    if ((Flt == NULL) || (Flt->Param.Ts <= 0.0f))
-    {
-        return 0.0f;
-    }
 
     if (Flt->First == 0U)
     {

@@ -1,5 +1,6 @@
 #include "Foc_voice.h"
 #include "Fast_sin/Fast_sin.h"
+#include "Foc_config.h"
 #include "Function/Function.h"
 #include "Motor_Control/Motor_Control.h"
 #include "My_TCPWM/My_TCPWM.h"
@@ -290,7 +291,7 @@ static uint8 Foc_voice_LoadNote(void)
 
     Voice.Song_duration8th += Note->Duration_8th;
     Duration_count =
-        (uint32)Voice.Song_duration8th * FOC_VOICE_CONTROL_HZ * 30u /
+        (uint32)Voice.Song_duration8th * MOTOR_VOICE_LOOP_HZ * 30u /
         Song->Bpm - Voice.Song_elapsed;
 
     Voice.Note_elapsed = 0u;
@@ -298,8 +299,8 @@ static uint8 Foc_voice_LoadNote(void)
     Voice.Tone_phase = 0u;
     Voice.Tone_step = (uint16)(
         ((uint32)Note->Pitch * ANGLE_PERIOD +
-         (FOC_VOICE_CONTROL_HZ / 2u)) /
-        FOC_VOICE_CONTROL_HZ);
+         (MOTOR_VOICE_LOOP_HZ / 2u)) /
+        MOTOR_VOICE_LOOP_HZ);
 
     if (Note->Pitch == FOC_VOICE_PITCH_REST)
     {
@@ -426,7 +427,16 @@ static void Foc_voice_Output(
     SVPWM_DutyCache_Update(DutyA, DutyB, DutyC);
 }
 
-/* 阻塞播放一枚正弦包络音符。 */
+/***********************************************
+ * @brief : 阻塞播放一枚带正弦包络的音符，调用前应确保电机停止
+ * @param : Phase 主发声相
+ * @param : Pitch 音符频率
+ * @param : Tone_ms 音符持续时间，单位为ms
+ * @param : Gap_ms 音符结束后的静音时间，单位为ms
+ * @return: 无
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
 void Foc_voice_PlayTone(
     Foc_voicePhase_t Phase,
     Foc_voicePitch_t Pitch,
@@ -442,12 +452,12 @@ void Foc_voice_PlayTone(
     float Envelope;
 
     Tone_count =
-        (uint32)Tone_ms * FOC_VOICE_CONTROL_HZ / 1000u;
+        (uint32)Tone_ms * MOTOR_VOICE_LOOP_HZ / 1000u;
     Gate_count = Tone_count * FOC_VOICE_GATE_PERCENT / 100u;
     Tone_step = (uint16)(
         ((uint32)Pitch * ANGLE_PERIOD +
-         (FOC_VOICE_CONTROL_HZ / 2u)) /
-        FOC_VOICE_CONTROL_HZ);
+         (MOTOR_VOICE_LOOP_HZ / 2u)) /
+        MOTOR_VOICE_LOOP_HZ);
 
     Irq_state = interrupt_global_disable();
 
@@ -457,7 +467,7 @@ void Foc_voice_PlayTone(
         Foc_voice_Output(Envelope, Tone_phase, Phase);
         Tone_phase = Angle_Wrap(
             (int32)Tone_phase + (int32)Tone_step);
-        system_delay_us(1000000u / FOC_VOICE_CONTROL_HZ);
+        system_delay_us(1000000u / MOTOR_VOICE_LOOP_HZ);
     }
 
     Foc_voice_OutputNeutral();
@@ -465,11 +475,25 @@ void Foc_voice_PlayTone(
     system_delay_ms(Gap_ms);
 }
 
+/***********************************************
+ * @brief : 从头开始播放《奇迹再现》旋律
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 void Foc_voice_Start(void)
 {
     (void)Foc_voice_StartSong(FOC_VOICE_SONG_ID);
 }
 
+/***********************************************
+ * @brief : 从头播放指定的下位机内置乐曲
+ * @param : Song_id 乐曲编号，范围1~内置乐曲数量
+ * @return: 1表示开始播放，0表示乐曲编号无效
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 uint8 Foc_voice_StartSong(uint8 Song_id)
 {
     if ((Song_id == 0u) || (Song_id > Foc_voice_GetSongCount()))
@@ -498,11 +522,25 @@ uint8 Foc_voice_StartSong(uint8 Song_id)
     return 1u;
 }
 
+/***********************************************
+ * @brief : 获取下位机内置乐曲数量
+ * @param : 无
+ * @return: 内置乐曲数量
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 uint8 Foc_voice_GetSongCount(void)
 {
     return (uint8)(sizeof(Voice_songs) / sizeof(Voice_songs[0]));
 }
 
+/***********************************************
+ * @brief : 获取指定内置乐曲的UTF-8名称
+ * @param : Song_id 乐曲编号，范围1~内置乐曲数量
+ * @return: 乐曲名称地址，编号无效时返回空指针
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 const char *Foc_voice_GetSongName(uint8 Song_id)
 {
     if ((Song_id == 0u) || (Song_id > Foc_voice_GetSongCount()))
@@ -513,6 +551,13 @@ const char *Foc_voice_GetSongName(uint8 Song_id)
     return Voice_songs[Song_id - 1u].Name;
 }
 
+/***********************************************
+ * @brief : 停止播放并关闭电机电压输出
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 void Foc_voice_Stop(void)
 {
     if ((Voice.Playing != 0u) ||
@@ -522,11 +567,25 @@ void Foc_voice_Stop(void)
     }
 }
 
+/***********************************************
+ * @brief : 查询电机音乐是否正在播放
+ * @param : 无
+ * @return: 1表示正在播放，0表示未播放
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 uint8 Foc_voice_IsPlaying(void)
 {
     return Voice.Playing;
 }
 
+/***********************************************
+ * @brief : 执行一次电机音乐控制周期，需按20 kHz周期调用
+ * @param : 无
+ * @return: 无
+ * @date  : 2026-08-28
+ * @author: L
+ ************************************************/
 void Foc_voice_Loop(void)
 {
     float Envelope;

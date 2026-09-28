@@ -1,5 +1,6 @@
 #include "My_ADC.h"
 #include "Current_sample/Current_sample.h"
+#include "Foc_Protocol/Foc_Protocol.h"
 #include "Motor_Control/Motor_Control.h"
 #include "adc/cy_adc.h"
 #include "trigmux/cy_trigmux.h"
@@ -250,9 +251,19 @@ static void My_ADC_Interrupt_Handle(uint32 ChannelIndex)
         Adc2SampleDone = 0u;
 
         Current_Sample_Update(AdcLastRawU, AdcLastRawW);
-        Angle_Update();
-        Current_Sample_Transform(Motor.Encoder.Electrical_angle);
+        if (Motor.Control_mode == MOTOR_CONTROL_SENSORLESS_FOC)
+        {
+            /* 无感控制不使用编码器反馈，编码器角度仅用于诊断dq电流和转矩。 */
+            Angle_Update();
+            Current_Sample_Transform(Motor.Encoder.Electrical_angle);
+        }
+        else
+        {
+            Angle_Update();
+            Current_Sample_Transform(Motor.Encoder.Electrical_angle);
+        }
         Motor_Control_Loop();
+        Foc_Protocol_CaptureObserverStream();
     }
 }
 
@@ -387,6 +398,13 @@ static void My_ADC_VoltageHardware_Init(void)
     adc_init(ADC_V_PIN, ADC_12BIT);
 }
 
+/***********************************************
+ * @brief : 初始化电流采样数据、电流ADC和母线电压ADC
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-30
+ * @author: L
+ ************************************************/
 void My_ADC_Init(void)
 {
     Current_Sample_Init();
@@ -394,11 +412,25 @@ void My_ADC_Init(void)
     My_ADC_CurrentHardware_Init();
 }
 
+/***********************************************
+ * @brief : 采样并获取电压检测通道原始值
+ * @param : /
+ * @return: ADC原始采样值
+ * @date  : 2026-08-15
+ * @author: L
+ ************************************************/
 uint16 My_ADC_GetBatteryRawValue(void)
 {
     return adc_convert(ADC_V_PIN);
 }
 
+/***********************************************
+ * @brief : 采样并获取母线电压
+ * @param : /
+ * @return: 母线电压，单位V
+ * @date  : 2026-08-15
+ * @author: L
+ ************************************************/
 float My_ADC_GetBatteryVoltage(void)
 {
     uint16 BatteryRaw;

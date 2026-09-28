@@ -1,5 +1,5 @@
 #include "My_LED.h"
-#include "My_ADC/My_ADC.h"
+#include "SVPWM/SVPWM.h"
 
 static LED_State_t MyLED_LedState = LED_OFF;
 static uint32 MyLED_BlinkElapsedMs = 0u;
@@ -18,6 +18,13 @@ static void My_LED_WriteLed(uint8 Level)
     gpio_set_level(LED_PIN, (MyLED_LedLevel == 0u) ? GPIO_HIGH : GPIO_LOW);
 }
 
+/***********************************************
+ * @brief : 初始化保护指示灯
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-15
+ * @author: L
+ ************************************************/
 void My_LED_Init(void)
 {
     gpio_init(LED_PIN, GPO, GPIO_HIGH, GPO_PUSH_PULL);
@@ -27,13 +34,15 @@ void My_LED_Init(void)
     My_LED_WriteLed(0u);
 }
 
+/***********************************************
+ * @brief : 设置保护指示灯状态
+ * @param : LedState 指示灯状态
+ * @return: void
+ * @date  : 2026-08-15
+ * @author: L
+ ************************************************/
 void My_LED_SetLedState(LED_State_t LedState)
 {
-    if ((LedState != LED_ON) && (LedState != LED_BLINK) && (LedState != LED_OFF))
-    {
-        LedState = LED_OFF;
-    }
-
     MyLED_LedState = LedState;
     MyLED_BlinkElapsedMs = 0u;
 
@@ -51,6 +60,13 @@ void My_LED_SetLedState(LED_State_t LedState)
     }
 }
 
+/***********************************************
+ * @brief : 更新保护指示灯输出，支持常亮、闪烁和常灭三种状态
+ * @param : ElapsedMs 距离上次调用经过的毫秒数
+ * @return: void
+ * @date  : 2026-08-15
+ * @author: L
+ ************************************************/
 void My_LED_Service(uint32 ElapsedMs)
 {
     if (MyLED_LedState != LED_BLINK)
@@ -66,14 +82,28 @@ void My_LED_Service(uint32 ElapsedMs)
     }
 }
 
+/***********************************************
+ * @brief : 获取当前保护指示灯状态
+ * @param : /
+ * @return: LED_State_t 当前指示灯状态
+ * @date  : 2026-08-15
+ * @author: L
+ ************************************************/
 LED_State_t My_LED_GetLedState(void)
 {
     return MyLED_LedState;
 }
 
+/***********************************************
+ * @brief : 根据控制环缓存的母线电压更新保护指示灯状态
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-15
+ * @author: L
+ ************************************************/
 void My_LED_CheckVoltage(void)
 {
-    float Voltage = My_ADC_GetBatteryVoltage();
+    float Voltage = SVPWM.VBUS;
     LED_State_t LedState;
 
     if (Voltage < VOLTAGE_LED_OFF_VALUE)

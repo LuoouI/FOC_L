@@ -14,6 +14,15 @@ static uint16 Sliding_Filter_ToUint16(float Value)
     return (uint16)Value;
 }
 
+/***********************************************
+ * @brief : 初始化滑动滤波器
+ * @param : Filter 滑动滤波器
+ * @param : WindowData 窗口数据缓存区
+ * @param : WindowSize 窗口长度
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: L
+ ************************************************/
 void Sliding_Filter_Init(Sliding_Filter_t *Filter, float *WindowData, uint8 WindowSize)
 {
     uint8 Index;
@@ -35,6 +44,14 @@ void Sliding_Filter_Init(Sliding_Filter_t *Filter, float *WindowData, uint8 Wind
     }
 }
 
+/***********************************************
+ * @brief : 向滑动滤波器写入一个新数据
+ * @param : Filter 滑动滤波器
+ * @param : NewData 新数据
+ * @return: void
+ * @date  : 2026-08-16
+ * @author: L
+ ************************************************/
 void Sliding_Filter_Update(Sliding_Filter_t *Filter, float NewData)
 {
     if ((Filter->WindowData == NULL) || (Filter->WindowSize == 0U))
@@ -58,6 +75,13 @@ void Sliding_Filter_Update(Sliding_Filter_t *Filter, float NewData)
     }
 }
 
+/***********************************************
+ * @brief : 获取普通滑动平均值
+ * @param : Filter 滑动滤波器
+ * @return: 普通滑动平均值
+ * @date  : 2026-08-16
+ * @author: L
+ ************************************************/
 float Sliding_Filter_Get(Sliding_Filter_t *Filter)
 {
     if ((Filter->WindowData == NULL) || (Filter->Count == 0U))
@@ -68,6 +92,13 @@ float Sliding_Filter_Get(Sliding_Filter_t *Filter)
     return Filter->Sum / (float)Filter->Count;
 }
 
+/***********************************************
+ * @brief : 获取去除一个最大值和一个最小值后的滑动平均值
+ * @param : Filter 滑动滤波器
+ * @return: 去极值滑动平均值
+ * @date  : 2026-08-16
+ * @author: L
+ ************************************************/
 float Sliding_Filter_GetTrimmed(Sliding_Filter_t *Filter)
 {
     uint8 Index;
@@ -105,11 +136,25 @@ float Sliding_Filter_GetTrimmed(Sliding_Filter_t *Filter)
     return TrimmedSum / (float)(Filter->Count - 2U);
 }
 
+/***********************************************
+ * @brief : 获取普通滑动平均值并转换为uint16
+ * @param : Filter 滑动滤波器
+ * @return: 四舍五入后的普通滑动平均值
+ * @date  : 2026-08-16
+ * @author: L
+ ************************************************/
 uint16 Sliding_Filter_GetUint16(Sliding_Filter_t *Filter)
 {
     return Sliding_Filter_ToUint16(Sliding_Filter_Get(Filter));
 }
 
+/***********************************************
+ * @brief : 获取去极值滑动平均值并转换为uint16
+ * @param : Filter 滑动滤波器
+ * @return: 四舍五入后的去极值滑动平均值
+ * @date  : 2026-08-16
+ * @author: L
+ ************************************************/
 uint16 Sliding_Filter_GetTrimmedUint16(Sliding_Filter_t *Filter)
 {
     return Sliding_Filter_ToUint16(Sliding_Filter_GetTrimmed(Filter));

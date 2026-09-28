@@ -48,6 +48,13 @@ static void Current_Sample_UpdateCal(uint16 AdcRawU, uint16 AdcRawW)
         Current_Sample_AdcToCurrent(Current.adc_cal_w);
 }
 
+/***********************************************
+ * @brief : 初始化三相电流采样数据
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-17
+ * @author: L
+ ************************************************/
 void Current_Sample_Init(void)
 {
     Current.adc_raw_u = 0u;
@@ -57,6 +64,13 @@ void Current_Sample_Init(void)
     Current_Sample_StartCalibration();
 }
 
+/***********************************************
+ * @brief : 开始新一轮电流采样零偏校准，调用时应保持电机无电流
+ * @param : /
+ * @return: void
+ * @date  : 2026-08-17
+ * @author: L
+ ************************************************/
 void Current_Sample_StartCalibration(void)
 {
     Current.offset_u = 0u;
@@ -74,6 +88,14 @@ void Current_Sample_StartCalibration(void)
     Current.sample_ready = 0u;
 }
 
+/***********************************************
+ * @brief : 更新一组三相电流采样数据
+ * @param : AdcRawU U相ADC原始采样值
+ * @param : AdcRawW W相ADC原始采样值
+ * @return: void
+ * @date  : 2026-08-29
+ * @author: L
+ ************************************************/
 void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawW)
 {
     // uint32 Cur_CalSumU = 0;
@@ -127,11 +149,30 @@ void Current_Sample_Update(uint16 AdcRawU, uint16 AdcRawW)
     Current.sample_ready = 1u;
 }
 
-void Current_Sample_Transform(uint16 ElectricalAngle)
+/***********************************************
+ * @brief : 根据当前三相电流更新Clark变换结果
+ * @param : 无
+ * @return: void
+ * @date  : 2026-09-13
+ * @author: L
+ ************************************************/
+void Current_Sample_Clarke(void)
 {
     Current.clark = foc_clark_calc(
         Current.current_u,
         Current.current_v);
+}
+
+/***********************************************
+ * @brief : 根据当前三相电流和电角度更新Clark、Park变换结果
+ * @param : ElectricalAngle 电角度，0~32767对应0~2PI
+ * @return: void
+ * @date  : 2026-08-17
+ * @author: L
+ ************************************************/
+void Current_Sample_Transform(uint16 ElectricalAngle)
+{
+    Current_Sample_Clarke();
     Current.park = foc_park_calc(
         Current.clark,
         ElectricalAngle);
