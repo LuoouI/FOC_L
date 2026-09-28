@@ -10,6 +10,8 @@ const {
   decodeParameterWritePayload,
   decodeTelemetryPayload,
   decodeWaveformPayload,
+  decodeObserverWaveformPayload,
+  decodeObserverStreamPayload,
   decodeSongListPayload,
 } = require("../electron/serial/protocol.cjs");
 
@@ -243,6 +245,61 @@ Test("高速波形报文能够解码三相电流和PWM", () => {
   Assert.ok(Math.abs(Result.ia - 1.1) < 0.001);
   Assert.ok(Math.abs(Result.uq - 4.8) < 0.001);
   Assert.ok(Math.abs(Result.dutyB - 51.2) < 0.001);
+});
+
+Test("SMO观测波形报文能够解码实际Alpha、Beta电流和Iq误差", () => {
+  const Data = Buffer.alloc(56);
+  Data.writeUInt32LE(3200, 0);
+  Data.writeFloatLE(1.2, 4);
+  Data.writeFloatLE(-0.8, 8);
+  Data.writeFloatLE(4.1, 12);
+  Data.writeFloatLE(-3.4, 16);
+  Data.writeFloatLE(2.1, 20);
+  Data.writeFloatLE(-1.7, 24);
+  Data.writeFloatLE(12.5, 28);
+  Data.writeFloatLE(87.5, 32);
+  Data.writeFloatLE(42.0, 36);
+  Data.writeFloatLE(-2.5, 40);
+  Data.writeFloatLE(1.05, 44);
+  Data.writeFloatLE(-0.35, 48);
+  Data.writeFloatLE(0.27, 52);
+
+  const Result = decodeObserverWaveformPayload(Data);
+  Assert.equal(Result.timestamp, 3.2);
+  Assert.ok(Math.abs(Result.smoIAlphaEst - 1.2) < 0.001);
+  Assert.ok(Math.abs(Result.smoIBetaEst + 0.8) < 0.001);
+  Assert.ok(Math.abs(Result.iAlphaActual - 1.05) < 0.001);
+  Assert.ok(Math.abs(Result.iBetaActual + 0.35) < 0.001);
+  Assert.ok(Math.abs(Result.smoIqError - 0.27) < 0.001);
+});
+
+Test("紧凑观测流按照字段位图解码选中的同步采样值", () => {
+  const Data = Buffer.alloc(22);
+  Data.writeUInt32LE(4100, 0);
+  Data.writeUInt16LE(0x0611, 4);
+  Data.writeFloatLE(0.12, 6);
+  Data.writeFloatLE(-0.03, 10);
+  Data.writeFloatLE(125.5, 14);
+  Data.writeFloatLE(121.25, 18);
+
+  const Result = decodeObserverStreamPayload(Data);
+  Assert.equal(Result.timestamp, 4.1);
+  Assert.ok(Math.abs(Result.iAlphaActual - 0.12) < 0.001);
+  Assert.ok(Math.abs(Result.smoIqError + 0.03) < 0.001);
+  Assert.ok(Math.abs(Result.electricalAngle - 125.5) < 0.001);
+  Assert.ok(Math.abs(Result.pllElectricalAngleEst - 121.25) < 0.001);
+  Assert.equal("smoIAlphaEst" in Result, false);
+});
+
+Test("紧凑观测流能够解码编码器实际机械角度", () => {
+  const Data = Buffer.alloc(10);
+  Data.writeUInt32LE(4200, 0);
+  Data.writeUInt16LE(0x8000, 4);
+  Data.writeFloatLE(278.25, 6);
+
+  const Result = decodeObserverStreamPayload(Data);
+  Assert.equal(Result.timestamp, 4.2);
+  Assert.ok(Math.abs(Result.mechanicalAngle - 278.25) < 0.001);
 });
 
 Test("乐曲列表报文能够解码UTF-8曲名", () => {

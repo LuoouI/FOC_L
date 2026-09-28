@@ -2264,6 +2264,15 @@
             </file>
         </group>
         <group>
+            <name>Get_time</name>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\Get_time\Get_time.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\Get_time\Get_time.h</name>
+            </file>
+        </group>
+        <group>
             <name>Motor_Control</name>
             <file>
                 <name>$PROJ_DIR$\..\..\code\Motor_Control\Motor_Control.c</name>
@@ -2271,6 +2280,60 @@
             <file>
                 <name>$PROJ_DIR$\..\..\code\Motor_Control\Motor_Control.h</name>
             </file>
+            <group>
+                <name>Foc</name>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Foc\Foc_Loop.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Foc\Foc_Loop.h</name>
+                </file>
+            </group>
+            <group>
+                <name>Observer</name>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Observer\PLL.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Observer\PLL.h</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Observer\SMO.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Observer\SMO.h</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Observer\HFI.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Observer\HFI.h</name>
+                </file>
+            </group>
+            <group>
+                <name>Feedback</name>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Feedback\Encoder_Feedback.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Feedback\Encoder_Feedback.h</name>
+                </file>
+            </group>
+            <group>
+                <name>Startup</name>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Startup\Open_Loop.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Startup\Open_Loop.h</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Startup\Zero_Calibration.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\..\code\Motor_Control\Startup\Zero_Calibration.h</name>
+                </file>
+            </group>
         </group>
         <group>
             <name>Motor_Flash</name>

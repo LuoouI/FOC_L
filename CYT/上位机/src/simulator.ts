@@ -5,6 +5,9 @@ const Clamp = (Value: number, Minimum: number, Maximum: number) => Math.min(Maxi
 const Motor_kv = 420;
 const Motor_kt = 60 / (2 * Math.PI * Motor_kv);
 const Current_adc_counts_per_amp = (4095 * 20 * 0.002) / 3.3;
+const Pll_damping_ratio = Math.SQRT1_2;
+const Pll_omega_limit = 3000;
+const Pll_integral_limit = 3000;
 
 export class Motor_simulator_t {
   private Telemetry: Telemetry_t = { ...Empty_telemetry };
@@ -15,6 +18,14 @@ export class Motor_simulator_t {
   private Last_position_degree = 0;
   private Last_position_target = 0;
   private Position_track_ready = false;
+  private Smo_i_alpha_est = 0;
+  private Smo_i_beta_est = 0;
+  private Smo_e_alpha_filter = 0;
+  private Smo_e_beta_filter = 0;
+  private Pll_integral_sum = 0;
+  private Pll_electrical_angle = 0;
+  private Pll_mechanical_angle = 0;
+  private Pll_direction = 1;
 
   /***********************************************
    * @brief : 推进仿真电机状态并生成一帧遥测数据
@@ -123,12 +134,90 @@ export class Motor_simulator_t {
     const Phase_a = Current_peak * Math.sin(Electrical_radian) + Current_noise;
     const Phase_b = Current_peak * Math.sin(Electrical_radian - (2 * Math.PI) / 3) + Current_noise;
     const Phase_c = -(Phase_a + Phase_b);
+    const Current_alpha = Phase_a;
+    const Current_beta = (Phase_a + 2 * Phase_b) / Math.sqrt(3);
+    const Smo_enabled = Loop_parameters.smoKSlide > 0 &&
+      Loop_parameters.smoBoundaryCurrent > 0 &&
+      Loop_parameters.smoFilterBandwidth > 0;
+    const Smo_filter_response = 1 - Math.exp(-Delta_time * Math.max(1, Loop_parameters.smoFilterBandwidth) * 2 * Math.PI);
+    this.Smo_i_alpha_est += (Current_alpha - this.Smo_i_alpha_est) * Math.min(1, Smo_filter_response);
+    this.Smo_i_beta_est += (Current_beta - this.Smo_i_beta_est) * Math.min(1, Smo_filter_response);
+    const Actual_iq = -Current_alpha * Math.sin(Electrical_radian) + Current_beta * Math.cos(Electrical_radian);
+    const Observer_iq = -this.Smo_i_alpha_est * Math.sin(Electrical_radian) + this.Smo_i_beta_est * Math.cos(Electrical_radian);
+    const Electrical_speed = this.Telemetry.speedActual * 7 * 2 * Math.PI / 60;
+    const Smo_e_alpha = Smo_enabled
+      ? Clamp(-Electrical_speed * Math.sin(Electrical_radian) * 0.006, -Loop_parameters.smoKSlide, Loop_parameters.smoKSlide)
+      : 0;
+    const Smo_e_beta = Smo_enabled
+      ? Clamp(Electrical_speed * Math.cos(Electrical_radian) * 0.006, -Loop_parameters.smoKSlide, Loop_parameters.smoKSlide)
+      : 0;
+    if (Smo_enabled) {
+      this.Smo_e_alpha_filter += (Smo_e_alpha - this.Smo_e_alpha_filter) * Math.min(1, Smo_filter_response);
+      this.Smo_e_beta_filter += (Smo_e_beta - this.Smo_e_beta_filter) * Math.min(1, Smo_filter_response);
+    } else {
+      this.Smo_e_alpha_filter = 0;
+      this.Smo_e_beta_filter = 0;
+    }
+    const Emf_amplitude = Math.hypot(this.Smo_e_alpha_filter, this.Smo_e_beta_filter);
+    let Pll_phase_error = 0;
+    let Pll_omega = 0;
+    const Pll_natural_omega = 2 * Math.PI * Loop_parameters.pllBandwidth;
+    const Pll_kp = 2 * Pll_damping_ratio * Pll_natural_omega;
+    const Pll_ki = Pll_natural_omega * Pll_natural_omega;
+    if (Math.abs(Electrical_speed) > 0.1) this.Pll_direction = Electrical_speed < 0 ? -1 : 1;
+    if (Emf_amplitude >= 0.02 &&
+        Loop_parameters.pllBandwidth > 0) {
+      Pll_phase_error = this.Pll_direction *
+        (-this.Smo_e_alpha_filter * Math.cos(this.Pll_electrical_angle) -
+         this.Smo_e_beta_filter * Math.sin(this.Pll_electrical_angle)) /
+        Emf_amplitude;
+      Pll_phase_error = Clamp(Pll_phase_error, -1, 1);
+      Pll_phase_error = Math.asin(Pll_phase_error);
+      const Pll_integral_next = Clamp(
+        this.Pll_integral_sum + Pll_ki * Pll_phase_error * Delta_time,
+        -Pll_integral_limit,
+        Pll_integral_limit);
+      const Pll_omega_unsaturated =
+        Pll_kp * Pll_phase_error + Pll_integral_next;
+      if (!((Pll_omega_unsaturated > Pll_omega_limit && Pll_phase_error > 0) ||
+            (Pll_omega_unsaturated < -Pll_omega_limit && Pll_phase_error < 0))) {
+        this.Pll_integral_sum = Pll_integral_next;
+      }
+      Pll_omega = Clamp(
+        Pll_kp * Pll_phase_error + this.Pll_integral_sum,
+        -Pll_omega_limit,
+        Pll_omega_limit);
+      this.Pll_electrical_angle =
+        (this.Pll_electrical_angle + Pll_omega * Delta_time + Math.PI * 2) % (Math.PI * 2);
+      this.Pll_mechanical_angle =
+        (this.Pll_mechanical_angle + Pll_omega * Delta_time / 7 + Math.PI * 2) % (Math.PI * 2);
+    } else {
+      this.Pll_integral_sum = 0;
+    }
+    const Pll_filter_omega = Math.PI * 2 * Math.max(1, Loop_parameters.smoFilterBandwidth);
+    const Pll_phase_compensation = Math.atan2(Pll_omega, Pll_filter_omega);
+    const Pll_electrical_angle =
+      ((this.Pll_electrical_angle + Pll_phase_compensation) * 180 / Math.PI + 360) % 360;
+    const Pll_mechanical_angle =
+      ((this.Pll_mechanical_angle + Pll_phase_compensation / 7) * 180 / Math.PI + 360) % 360;
     const Voltage_q = Command.driveMode === "openLoop"
       ? Clamp(Command.voltageTarget, -22, 22)
       : Clamp(this.Telemetry.iqActual * 0.6 + Math.abs(Display_speed) * 0.0014, -22, 22);
     const Duty_span = Clamp((Voltage_q / 48) * 100, -45, 45);
+    const Drive_mode_value = Command.driveMode === "openLoop"
+      ? 0
+      : Command.driveMode === "encoderFoc"
+        ? 1
+        : Command.driveMode === "foc_voice"
+          ? 2
+          : 3;
 
     this.Telemetry = {
+      state: Running ? 1 : 0,
+      mode: Drive_mode_value,
+      fault: 0,
+      flags: Running ? 0x03 | (Command.driveMode === "foc_voice" ? 0x04 : 0) : 0x02,
+      musicPlaying: Running && Command.driveMode === "foc_voice" ? 1 : 0,
       timestamp: Time,
       speedTarget: Running ? this.Speed_setpoint : 0,
       speedActual: Display_speed,
@@ -145,12 +234,26 @@ export class Motor_simulator_t {
       uq: Voltage_q,
       busVoltage: 48.1 + Math.sin(Time * 0.8) * 0.08 - Current_peak * 0.018,
       mechanicalAngle: this.Mechanical_angle,
+      mechanicalAngleTarget: Position_control ? Clamp(Command.positionTarget, 0, 360) : 0,
       electricalAngle: Electrical_angle,
       dutyA: 50 + Duty_span * Math.sin(Electrical_radian),
       dutyB: 50 + Duty_span * Math.sin(Electrical_radian - (2 * Math.PI) / 3),
       dutyC: 50 + Duty_span * Math.sin(Electrical_radian + (2 * Math.PI) / 3),
       zeroOffset: 2048,
       torque: this.Telemetry.iqActual * Motor_kt,
+      iAlphaActual: Current_alpha,
+      iBetaActual: Current_beta,
+      smoIAlphaEst: this.Smo_i_alpha_est,
+      smoIBetaEst: this.Smo_i_beta_est,
+      smoEAlpha: Smo_e_alpha,
+      smoEBeta: Smo_e_beta,
+      smoEAlphaFilter: this.Smo_e_alpha_filter,
+      smoEBetaFilter: this.Smo_e_beta_filter,
+      pllMechanicalAngleEst: Pll_mechanical_angle,
+      pllElectricalAngleEst: Pll_electrical_angle,
+      pllOmegaEst: Pll_omega,
+      pllPhaseError: Pll_phase_error * 180 / Math.PI,
+      smoIqError: Actual_iq - Observer_iq,
     };
 
     return { ...this.Telemetry };
@@ -172,5 +275,13 @@ export class Motor_simulator_t {
     this.Last_position_degree = 0;
     this.Last_position_target = 0;
     this.Position_track_ready = false;
+    this.Smo_i_alpha_est = 0;
+    this.Smo_i_beta_est = 0;
+    this.Smo_e_alpha_filter = 0;
+    this.Smo_e_beta_filter = 0;
+    this.Pll_integral_sum = 0;
+    this.Pll_electrical_angle = 0;
+    this.Pll_mechanical_angle = 0;
+    this.Pll_direction = 1;
   }
 }

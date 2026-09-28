@@ -2,6 +2,47 @@ const Protocol_version = 1;
 const Frame_header = Buffer.from([0xaa, 0x55]);
 const Maximum_payload_length = 1024;
 const Parameter_write_length = 44;
+const Observer_parameter_length = 16;
+const Compact_telemetry_length = 24;
+const Legacy_telemetry_length = 56;
+const Observer_waveform_length = 56;
+const Observer_stream_fields = Object.freeze([
+  "iAlphaActual",
+  "iBetaActual",
+  "smoIAlphaEst",
+  "smoIBetaEst",
+  "smoIqError",
+  "smoEAlpha",
+  "smoEBeta",
+  "smoEAlphaFilter",
+  "smoEBetaFilter",
+  "electricalAngle",
+  "pllElectricalAngleEst",
+  "pllOmegaEst",
+  "pllPhaseError",
+  "pllMechanicalAngleEst",
+  "speedActual",
+  "mechanicalAngle",
+  "speedTarget",
+  "idTarget",
+  "idActual",
+  "iqTarget",
+  "iqActual",
+  "ia",
+  "ib",
+  "ic",
+  "adcRawU",
+  "adcRawW",
+  "ud",
+  "uq",
+  "busVoltage",
+  "dutyA",
+  "dutyB",
+  "dutyC",
+  "zeroOffset",
+  "torque",
+]);
+const Observer_stream_field_mask = (2 ** Observer_stream_fields.length) - 1;
 const Speed_ramp_minimum = 1;
 const Speed_ramp_maximum = 100000;
 const Speed_ramp_default = 0;
@@ -12,10 +53,19 @@ const Frame_type = Object.freeze({
   control: 0x10,
   parameterRead: 0x11,
   parameterWrite: 0x12,
+  observerParameterRead: 0x13,
   songList: 0x14,
   zeroCalibration: 0x15,
+  reset: 0x16,
+  observerStreamConfig: 0x17,
   telemetry: 0x20,
   waveform: 0x21,
+  observerWaveform: 0x22,
+  observerParameterWrite: 0x23,
+  observerStream: 0x24,
+  observerStreamBatch: 0x25,
+  observerStreamAdaptiveBatch: 0x26,
+  observerStreamExtendedBatch: 0x27,
   fault: 0x30,
   log: 0x31,
 });
@@ -33,6 +83,19 @@ const Drive_mode = Object.freeze({
   foc_voice: 2,
   sensorlessFoc: 3,
 });
+
+/***********************************************
+ * @brief : 判断数字位图中是否选择指定观测字段
+ * @param : Field_mask 观测字段位图
+ * @param : Bit 字段位号
+ * @return: 已选择返回true，否则返回false
+ * @date  : 2026-09-23
+ * @author: L
+ ************************************************/
+function isObserverStreamFieldSelected(Field_mask, Bit) {
+  const Bit_value = 2 ** Bit;
+  return Math.floor(Field_mask / Bit_value) % 2 === 1;
+}
 
 /***********************************************
  * @brief : 计算串口帧的 CRC16-Modbus 校验值
@@ -152,8 +215,8 @@ function encodeControlFrame(Command, Sequence) {
 }
 
 /***********************************************
- * @brief : 将FOC各控制环参数编码成参数写入帧
- * @param : Parameters 电流、速度和位置环参数
+ * @brief : 将编码器FOC兼容参数编码成参数写入帧
+ * @param : Parameters 编码器FOC参数和无感观测器参数
  * @param : Sequence 帧序号
  * @return: 完整参数写入报文
  * @date  : 2026-08-29
@@ -204,6 +267,30 @@ function encodeParameterWriteFrame(Parameters, Sequence) {
 }
 
 /***********************************************
+ * @brief : 将SMO和PLL可调参数编码成独立参数帧
+ * @param : Parameters 无感观测器参数
+ * @param : Sequence 帧序号
+ * @return: 完整观测器参数报文
+ * @date  : 2026-09-12
+ * @author: L
+ ************************************************/
+function encodeObserverParameterWriteFrame(Parameters, Sequence) {
+  const Payload = Buffer.alloc(Observer_parameter_length);
+  const Parameter_values = [
+    Parameters.smoKSlide,
+    Parameters.smoBoundaryCurrent,
+    Parameters.smoFilterBandwidth,
+    Parameters.pllBandwidth,
+  ];
+  Parameter_values.forEach((Value, Index) => {
+    const Number_value = Number(Value);
+    const Safe_value = Number.isFinite(Number_value) ? Math.max(0, Number_value) : 0;
+    Payload.writeFloatLE(Safe_value, Index * 4);
+  });
+  return encodeFrame(Frame_type.observerParameterWrite, Sequence, Payload);
+}
+
+/***********************************************
  * @brief : 解码遥测帧中的电机运行数据
  * @param : Payload 遥测负载
  * @return: 解码后的遥测字段
@@ -211,8 +298,25 @@ function encodeParameterWriteFrame(Parameters, Sequence) {
  * @author: LYF
  ************************************************/
 function decodeTelemetryPayload(Payload) {
-  if (!Buffer.isBuffer(Payload) || Payload.length < 56) throw new Error("遥测负载长度不足 56 字节");
+  if (!Buffer.isBuffer(Payload) ||
+      (Payload.length !== Compact_telemetry_length && Payload.length < Legacy_telemetry_length)) {
+    throw new Error("遥测负载长度必须为24字节或兼容的56字节");
+  }
   const Flags = Payload.readUInt8(3);
+  if (Payload.length === Compact_telemetry_length) {
+    return {
+      state: Payload.readUInt8(0),
+      mode: Payload.readUInt8(1),
+      fault: Payload.readUInt8(2),
+      flags: Flags,
+      musicPlaying: (Flags & 0x04) !== 0 ? 1 : 0,
+      timestamp: Payload.readUInt32LE(4) / 1000,
+      speedActual: Payload.readFloatLE(8),
+      iqActual: Payload.readFloatLE(12),
+      busVoltage: Payload.readFloatLE(16),
+      mechanicalAngle: Payload.readFloatLE(20),
+    };
+  }
   return {
     state: Payload.readUInt8(0),
     mode: Payload.readUInt8(1),
@@ -259,9 +363,66 @@ function decodeWaveformPayload(Payload) {
 }
 
 /***********************************************
- * @brief : 解码下位机返回的FOC环路参数
+ * @brief : 解码SMO和PLL高速观测器波形及Iq误差采样
+ * @param : Payload 观测器波形负载
+ * @return: 解码后的观测器字段
+ * @date  : 2026-09-14
+ * @author: L
+ ************************************************/
+function decodeObserverWaveformPayload(Payload) {
+  if (!Buffer.isBuffer(Payload) || Payload.length < Observer_waveform_length) throw new Error("观测器波形负载长度不足 56 字节");
+  return {
+    timestamp: Payload.readUInt32LE(0) / 1000,
+    smoIAlphaEst: Payload.readFloatLE(4),
+    smoIBetaEst: Payload.readFloatLE(8),
+    smoEAlpha: Payload.readFloatLE(12),
+    smoEBeta: Payload.readFloatLE(16),
+    smoEAlphaFilter: Payload.readFloatLE(20),
+    smoEBetaFilter: Payload.readFloatLE(24),
+    pllMechanicalAngleEst: Payload.readFloatLE(28),
+    pllElectricalAngleEst: Payload.readFloatLE(32),
+    pllOmegaEst: Payload.readFloatLE(36),
+    pllPhaseError: Payload.readFloatLE(40),
+    iAlphaActual: Payload.readFloatLE(44),
+    iBetaActual: Payload.readFloatLE(48),
+    smoIqError: Payload.readFloatLE(52),
+  };
+}
+
+/***********************************************
+ * @brief : 解码按位图紧密排列的SMO和PLL观测流负载
+ * @param : Payload 紧凑观测流负载
+ * @return: 解码后的时间戳和已订阅观测字段
+ * @date  : 2026-09-15
+ * @author: L
+ ************************************************/
+function decodeObserverStreamPayload(Payload) {
+  if (!Buffer.isBuffer(Payload) || Payload.length < 6) throw new Error("紧凑观测流负载长度不足 6 字节");
+  const Field_mask = Payload.readUInt16LE(4);
+  if (!Number.isSafeInteger(Field_mask) ||
+      Field_mask < 0 ||
+      Field_mask > Observer_stream_field_mask) throw new Error("紧凑观测流包含未知字段");
+  const Field_count = Observer_stream_fields.reduce(
+    (Count, _Field, Bit) => Count + (isObserverStreamFieldSelected(Field_mask, Bit) ? 1 : 0),
+    0,
+  );
+  const Expected_length = 6 + Field_count * 4;
+  if (Payload.length !== Expected_length) throw new Error(`紧凑观测流负载长度应为 ${Expected_length} 字节`);
+
+  const Result = { timestamp: Payload.readUInt32LE(0) / 1000 };
+  let Offset = 6;
+  Observer_stream_fields.forEach((Field, Bit) => {
+    if (!isObserverStreamFieldSelected(Field_mask, Bit)) return;
+    Result[Field] = Payload.readFloatLE(Offset);
+    Offset += 4;
+  });
+  return Result;
+}
+
+/***********************************************
+ * @brief : 解码下位机返回的编码器FOC兼容参数
  * @param : Payload 44字节参数负载
- * @return: 解码后的电流、速度和位置环参数
+ * @return: 解码后的编码器FOC参数
  * @date  : 2026-08-29
  * @author: L
  ************************************************/
@@ -281,6 +442,24 @@ function decodeParameterWritePayload(Payload) {
     positionSpeedDeadband: Read_parameter(32),
     positionOutputLimit: Read_parameter(36),
     positionDeadband: Read_parameter(40),
+  };
+}
+
+/***********************************************
+ * @brief : 解码下位机返回的SMO和PLL参数
+ * @param : Payload 观测器参数负载
+ * @return: 解码后的观测器参数
+ * @date  : 2026-09-12
+ * @author: L
+ ************************************************/
+function decodeObserverParameterPayload(Payload) {
+  if (!Buffer.isBuffer(Payload) || Payload.length !== Observer_parameter_length) throw new Error("观测器参数负载必须为 16 字节");
+  const Read_parameter = (Offset) => Number(Payload.readFloatLE(Offset).toFixed(6));
+  return {
+    smoKSlide: Read_parameter(0),
+    smoBoundaryCurrent: Read_parameter(4),
+    smoFilterBandwidth: Read_parameter(8),
+    pllBandwidth: Read_parameter(12),
   };
 }
 
@@ -372,9 +551,20 @@ module.exports = {
   encodeFrame,
   encodeControlFrame,
   encodeParameterWriteFrame,
+  encodeObserverParameterWriteFrame,
   Parameter_write_length,
+  Observer_parameter_length,
+  Compact_telemetry_length,
+  Legacy_telemetry_length,
+  Observer_waveform_length,
+  Observer_stream_field_mask,
+  Observer_stream_fields,
+  isObserverStreamFieldSelected,
   decodeTelemetryPayload,
   decodeWaveformPayload,
+  decodeObserverWaveformPayload,
+  decodeObserverStreamPayload,
   decodeParameterWritePayload,
+  decodeObserverParameterPayload,
   decodeSongListPayload,
 };

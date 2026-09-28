@@ -2,6 +2,7 @@ export type Control_mode_t = "voltage" | "current" | "speed" | "position";
 export type Position_return_mode_t = "shortest" | "reversePath";
 
 export type Drive_mode_t = "openLoop" | "foc_voice" | "encoderFoc" | "sensorlessFoc";
+export type Sensorless_group_t = "hfi" | "smo" | "pll";
 
 export type Connection_state_t = "offline" | "connecting" | "online";
 
@@ -11,6 +12,11 @@ export interface Music_track_t {
 }
 
 export interface Telemetry_t {
+  state: number;
+  mode: number;
+  fault: number;
+  flags: number;
+  musicPlaying: number;
   timestamp: number;
   speedTarget: number;
   speedActual: number;
@@ -27,12 +33,34 @@ export interface Telemetry_t {
   uq: number;
   busVoltage: number;
   mechanicalAngle: number;
+  mechanicalAngleTarget: number;
   electricalAngle: number;
   dutyA: number;
   dutyB: number;
   dutyC: number;
   zeroOffset: number;
   torque: number;
+  iAlphaActual: number;
+  iBetaActual: number;
+  smoIAlphaEst: number;
+  smoIBetaEst: number;
+  smoEAlpha: number;
+  smoEBeta: number;
+  smoEAlphaFilter: number;
+  smoEBetaFilter: number;
+  pllMechanicalAngleEst: number;
+  pllElectricalAngleEst: number;
+  pllOmegaEst: number;
+  pllPhaseError: number;
+  smoIqError: number;
+}
+
+export interface Observer_stream_batch_t {
+  fieldMask: number;
+  sampleStride: number;
+  sampleCount: number;
+  timestampHz: number;
+  data: ArrayBuffer | Uint8Array;
 }
 
 export interface Motor_command_t {
@@ -67,6 +95,10 @@ export interface Foc_loop_parameters_t {
   positionSpeedDeadband: number;
   positionOutputLimit: number;
   positionDeadband: number;
+  smoKSlide: number;
+  smoBoundaryCurrent: number;
+  smoFilterBandwidth: number;
+  pllBandwidth: number;
 }
 
 export interface Channel_definition_t {

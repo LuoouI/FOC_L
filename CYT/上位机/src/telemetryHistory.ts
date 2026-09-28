@@ -1,7 +1,7 @@
 import type { Telemetry_t } from "./types";
 
 type Telemetry_history_listener_t = () => void;
-const Display_notify_interval_ms = 33;
+const Default_display_notify_interval_ms = 16;
 const Timestamp_reset_threshold_s = 5;
 
 /*===========================================================================*/
@@ -15,6 +15,7 @@ export class Telemetry_history_t {
   private Count = 0;
   private Revision = 0;
   private Notify_timer: number | null = null;
+  private Display_notify_interval_ms = Default_display_notify_interval_ms;
 
   /***********************************************
    * @brief : 创建固定容量的遥测环形缓冲
@@ -56,6 +57,23 @@ export class Telemetry_history_t {
    ************************************************/
   getCount() {
     return this.Count;
+  }
+
+  /***********************************************
+   * @brief : 调整示波器缓冲通知界面的合并周期
+   * @param : Interval_ms 显示通知周期，单位为毫秒
+   * @return: 无
+   * @date  : 2026-09-16
+   * @author: L
+   ************************************************/
+  setDisplayNotifyInterval(Interval_ms: number) {
+    const Next_interval = Math.max(4, Interval_ms);
+    if (Next_interval === this.Display_notify_interval_ms) return;
+    this.Display_notify_interval_ms = Next_interval;
+    if (this.Notify_timer === null) return;
+    window.clearTimeout(this.Notify_timer);
+    this.Notify_timer = null;
+    this.Schedule_notify();
   }
 
   /***********************************************
@@ -149,7 +167,7 @@ export class Telemetry_history_t {
     this.Notify_timer = window.setTimeout(() => {
       this.Notify_timer = null;
       this.Listeners.forEach((Listener) => Listener());
-    }, Display_notify_interval_ms);
+    }, this.Display_notify_interval_ms);
   }
 
   /***********************************************
