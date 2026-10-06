@@ -10,7 +10,8 @@
     "build": "tsc -b && vite build",
     "test": "node --test tests/*.test.cjs",
     "preview": "vite preview --host 127.0.0.1",
-    "start": "electron ."
+    "start": "electron .",
+    "dist:installer": "electron-builder --win nsis"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -24,8 +25,46 @@
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
     "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
     "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.foc.motorstudio",
+    "productName": "FOC_L",
+    "artifactName": "FOC_L-${version}-Setup.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "npmRebuild": false,
+    "asarUnpack": [
+      "node_modules/@serialport/bindings-cpp/prebuilds/win32-x64/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/foc_l_icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FOC_L"
+    }
   }
 }
