@@ -1,9 +1,9 @@
 {
   "name": "foc-motor-studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "FOC 电机调试上位机",
-  "main": "electron/main.cjs",
+  "main": "electron/bootstrap.cjs",
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron . --dev\"",
     "dev:web": "vite --host 127.0.0.1",
@@ -42,6 +42,12 @@
       "electron/**/*",
       "resources/**/*",
       "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "resources/FOC_L-safe-mode.cmd",
+        "to": "FOC_L-safe-mode.cmd"
+      }
     ],
     "asar": true,
     "npmRebuild": false,

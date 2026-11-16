@@ -23,6 +23,16 @@
 
 ## 启动
 
+### Windows 安装版
+
+在 [GitHub Releases](https://github.com/LuoouI/FOC_L/releases) 下载 `FOC_L-版本号-Setup.exe`，双击安装后通过桌面的 FOC_L 快捷方式启动，无需安装 Node.js。安装版为 Windows 10/11 x64。
+
+若安装后打开即退出，先完全退出 FOC_L，再打开安装目录中的 `FOC_L-safe-mode.cmd`，使用关闭 GPU 硬件加速的模式启动；也可在快捷方式目标末尾追加 ` --disable-gpu`。此模式用于区分图形驱动兼容问题，不修改电机参数。
+
+从 v0.1.1 开始，启动阶段会记录运行环境、页面加载和进程退出信息。发生异常后，按 `Win + R`，输入 `%APPDATA%\FOC_L\logs`，提供其中的 `startup.log` 和 `chromium.log`；若该目录未生成，需提供 Windows“事件查看器 → Windows 日志 → 应用程序”中的 FOC_L 错误记录。原生崩溃转储仅保存到本机，不自动上传。
+
+### 源码运行
+
 首次运行：
 
 ```powershell
