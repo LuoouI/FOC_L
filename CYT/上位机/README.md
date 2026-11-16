@@ -2,6 +2,8 @@
 
 用于当前 `FOC_L` 工程的 Windows 电机调试上位机。首版提供完整的仿真设备，可在下位机通信协议完成前检查工作流和界面。
 
+Windows 安装包：[FOC_L-0.1.1-Setup.exe](release/FOC_L-0.1.1-Setup.exe)。下载后双击安装，无需 Node.js。当前为启动诊断版，尚未确认修复部分 Windows 10 电脑的闪退问题。
+
 ## 已完成功能
 
 - 电机连接、使能、停止、急停和急停复位
@@ -25,7 +27,7 @@
 
 ### Windows 安装版
 
-在 [GitHub Releases](https://github.com/LuoouI/FOC_L/releases) 下载 `FOC_L-版本号-Setup.exe`，双击安装后通过桌面的 FOC_L 快捷方式启动，无需安装 Node.js。安装版为 Windows 10/11 x64。
+打开本目录的 [release 文件夹](release)，点击 `FOC_L-0.1.1-Setup.exe`，再点击文件页面右上角的下载按钮；也可在 [GitHub Releases](https://github.com/LuoouI/FOC_L/releases) 下载。双击安装后通过桌面的 FOC_L 快捷方式启动，无需安装 Node.js。安装版为 Windows 10/11 x64，文件校验值见 [SHA256SUMS.txt](release/SHA256SUMS.txt)。
 
 若安装后打开即退出，先完全退出 FOC_L，再打开安装目录中的 `FOC_L-safe-mode.cmd`，使用关闭 GPU 硬件加速的模式启动；也可在快捷方式目标末尾追加 ` --disable-gpu`。此模式用于区分图形驱动兼容问题，不修改电机参数。
 
